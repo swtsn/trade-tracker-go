@@ -1,0 +1,69 @@
+package domain
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"time"
+
+	"github.com/shopspring/decimal"
+)
+
+type AssetClass string
+
+const (
+	AssetClassEquity       AssetClass = "equity"
+	AssetClassEquityOption AssetClass = "equity_option"
+	AssetClassFuture       AssetClass = "future"
+	AssetClassFutureOption AssetClass = "future_option"
+)
+
+type OptionType string
+
+const (
+	OptionTypeCall OptionType = "C"
+	OptionTypePut  OptionType = "P"
+)
+
+type OptionDetails struct {
+	Expiration time.Time
+	Strike     decimal.Decimal
+	OptionType OptionType
+	Multiplier decimal.Decimal
+	OSI        string
+}
+
+type FutureDetails struct {
+	ExpiryMonth  time.Time
+	ExchangeCode string
+}
+
+type Instrument struct {
+	Symbol     string
+	AssetClass AssetClass
+	Option     *OptionDetails
+	Future     *FutureDetails
+}
+
+// InstrumentID returns the deterministic SHA-256 hash ID for this instrument.
+// The hash covers all fields that make an instrument unique: symbol, asset class,
+// option fields (expiration, strike, option type), and future fields (expiry month,
+// exchange code). This matches the DB UNIQUE constraint.
+func (inst Instrument) InstrumentID() string {
+	var expiration, strike, optionType string
+	if inst.Option != nil {
+		expiration = inst.Option.Expiration.UTC().Format(time.RFC3339)
+		strike = inst.Option.Strike.String()
+		optionType = string(inst.Option.OptionType)
+	}
+	var expiryMonth, exchangeCode string
+	if inst.Future != nil {
+		if !inst.Future.ExpiryMonth.IsZero() {
+			expiryMonth = inst.Future.ExpiryMonth.UTC().Format("2006-01")
+		}
+		exchangeCode = inst.Future.ExchangeCode
+	}
+	input := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+		inst.Symbol, inst.AssetClass, expiration, strike, optionType, expiryMonth, exchangeCode)
+	sum := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", sum)
+}

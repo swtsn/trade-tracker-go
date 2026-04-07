@@ -25,7 +25,7 @@ Phase 3 Importer              Phase 2 Service Layer
 ──────────────────            ────────────────────────────────────────
 tastytrade/parser.go  ──┐
 schwab/parser.go      ──┤──► []domain.Transaction ──► ImportService.Import()
-(future: gRPC client) ──┘    []domain.MoneyMovement ► ImportService.ImportMoneyMovements()
+(future: gRPC client) ──┘
 ```
 
 This separation means the import service is fully testable without file I/O, and the
@@ -194,9 +194,6 @@ type ImportError struct {
    e. For each closing leg: `positionSvc.CloseLots(tx)`
 5. `positionSvc.RefreshPosition` for each affected (accountID, instrumentID)
 
-**`ImportMoneyMovements(ctx, []domain.MoneyMovement) (*ImportResult, error)`** — deduplicates
-by `BrokerEventID` and persists.
-
 Trade grouping is the importer's responsibility. Each `domain.Transaction` arrives with
 `TradeID` already set to a consistent value for co-legs of the same order.
 
@@ -240,8 +237,7 @@ GetPnL(ctx, chainID string) (domain.PnL, error)  // sum of lot_closings.realized
 
 ### `analytics_service.go`
 
-Aggregation over persisted data. Unrealized P&L requires market prices, which are not
-tracked in Phase 2 — `Unrealized` is always 0.
+Aggregation over persisted data.
 
 ```go
 GetSymbolPnL(ctx, accountID, symbol string) (*SymbolPnL, error)
