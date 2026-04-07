@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(go build:*)",
-      "Bash(./bin/trade-tracker)"
+      "Bash(./bin/trade-tracker)",
+      "Bash(go test:*)"
     ]
   }
 }

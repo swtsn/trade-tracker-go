@@ -22,9 +22,7 @@ Build the domain types and database layer. No business logic, no gRPC. At the en
 - `OptionType` string enum: `C | P`
 - `Instrument` struct: `Symbol`, `AssetClass`, `*OptionDetails`, `*FutureDetails`
 - `OptionDetails`: `Expiration`, `Strike decimal.Decimal`, `OptionType`, `Multiplier decimal.Decimal`, `OSI string`
-- `FutureDetails`: `ExpiryMonth`, `Multiplier decimal.Decimal`, `ExchangeCode string`
-- Note: `Multiplier` is `decimal.Decimal` (not `int`) to support fractional multipliers in
-  futures options (e.g., Schwab `/NGK26` natural gas micro = `0.0001`)
+- `FutureDetails`: `ExpiryMonth`, `ExchangeCode string`
 - `InstrumentID() string` — returns the deterministic SHA-256 hash ID for this instrument
 
 ### `transaction.go`
@@ -49,17 +47,9 @@ Build the domain types and database layer. No business logic, no gRPC. At the en
 - `Chain` struct
 - `ChainLink` struct
 
-### `money_movement.go`
-- `MoneyMovementType` string enum: `dividend | interest | div_reinvest`
-- `MoneyMovementID` type alias for `string`
-- `MoneyMovement` struct: `ID`, `AccountID`, `Broker`, `BrokerEventID`, `MovementType`,
-  `Symbol` (empty for interest), `Amount decimal.Decimal`, `Description`, `OccurredAt`
-- Dividend reinvestment shares are a normal `Transaction` (Action=BTO); `div_reinvest` records
-  the corresponding cash disbursement. Tastytrade's paired withdrawal row is ignored (nets to zero).
-
 ### `pnl.go`
-- `PnL` struct: `Realized`, `Unrealized`, `Fees`, `NetRealized decimal.Decimal`
-- `Total() decimal.Decimal`
+- `PnL` struct: `Realized`, `Fees decimal.Decimal`
+- `NetRealized() decimal.Decimal`
 
 ### `errors.go`
 - Sentinel domain errors: `ErrNotFound`, `ErrDuplicate`, `ErrInvalidInstrument`, etc.
@@ -88,12 +78,6 @@ Managed by `golang-migrate/migrate/v4` with SQL files embedded via `//go:embed`.
 **`003_import_history.sql`**
 - `import_jobs`
 
-**`004_money_movements.sql`**
-- `money_movements`
-  - `id`, `account_id`, `broker`, `broker_event_id`, `movement_type`, `symbol`, `amount (TEXT)`,
-    `description`, `occurred_at`, `created_at`
-  - `UNIQUE(broker_event_id, broker, account_id)` for dedup on re-import
-
 See `architecture.md` for full column definitions per table.
 
 ### Connection setup (`internal/repository/sqlite/db.go`)
@@ -118,7 +102,6 @@ Files:
 - `model/trade.go` — `sqlTrade`
 - `model/position.go` — `sqlPosition`, `sqlPositionLot`, `sqlLotClosing`
 - `model/chain.go` — `sqlChain`, `sqlChainLink`
-- `model/money_movement.go` — `sqlMoneyMovement`
 
 ---
 
@@ -164,12 +147,6 @@ type PositionRepository interface {
 
     CreateLotClosing(ctx, *domain.LotClosing) error
     ListLotClosings(ctx, lotID domain.LotID) ([]domain.LotClosing, error)
-}
-
-type MoneyMovementRepository interface {
-    Create(ctx, *domain.MoneyMovement) error
-    ListByAccount(ctx, accountID string, from, to time.Time) ([]domain.MoneyMovement, error)
-    ExistsByBrokerEventID(ctx, brokerEventID, broker, accountID string) (bool, error)
 }
 
 type ChainRepository interface {

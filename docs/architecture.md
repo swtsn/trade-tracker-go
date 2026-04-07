@@ -109,7 +109,6 @@ type OptionDetails struct {
 
 type FutureDetails struct {
     ExpiryMonth  time.Time
-    Multiplier   int
     ExchangeCode string
 }
 ```
