@@ -14,6 +14,7 @@ type instrumentRepo struct {
 	db *sql.DB
 }
 
+// NewInstrumentRepository returns an InstrumentRepository backed by the given SQLite database.
 func NewInstrumentRepository(db *sql.DB) *instrumentRepo {
 	return &instrumentRepo{db: db}
 }
@@ -35,6 +36,7 @@ func (r *instrumentRepo) Upsert(ctx context.Context, instrument *domain.Instrume
 	return nil
 }
 
+// GetByID returns the instrument with the given deterministic hash ID, or ErrNotFound.
 func (r *instrumentRepo) GetByID(ctx context.Context, id string) (*domain.Instrument, error) {
 	var s model.Instrument
 	row := r.db.QueryRowContext(ctx,

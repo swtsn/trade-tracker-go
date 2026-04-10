@@ -15,10 +15,12 @@ type chainRepo struct {
 	db *sql.DB
 }
 
+// NewChainRepository returns a ChainRepository backed by the given SQLite database.
 func NewChainRepository(db *sql.DB) *chainRepo {
 	return &chainRepo{db: db}
 }
 
+// CreateChain inserts a new chain row. Returns ErrDuplicate if the ID already exists.
 func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error {
 	s := model.ChainToStorage(*chain)
 	_, err := r.db.ExecContext(ctx,
@@ -35,6 +37,7 @@ func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error 
 	return nil
 }
 
+// GetChainByID returns the chain with its Links populated, or ErrNotFound.
 func (r *chainRepo) GetChainByID(ctx context.Context, id string) (*domain.Chain, error) {
 	var s model.Chain
 	err := r.db.QueryRowContext(ctx,
@@ -61,6 +64,8 @@ func (r *chainRepo) GetChainByID(ctx context.Context, id string) (*domain.Chain,
 	return &chain, nil
 }
 
+// ListChainsByAccount returns chains for an account ordered by created_at DESC.
+// When openOnly is true, only chains with no closed_at are returned.
 func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error) {
 	query := `SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at
 	          FROM chains WHERE account_id = ?`
@@ -90,6 +95,7 @@ func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, o
 	return chains, rows.Err()
 }
 
+// UpdateChainClosed records the close timestamp for the given chain.
 func (r *chainRepo) UpdateChainClosed(ctx context.Context, id string, closedAt time.Time) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE chains SET closed_at = ? WHERE id = ?`,
@@ -101,6 +107,7 @@ func (r *chainRepo) UpdateChainClosed(ctx context.Context, id string, closedAt t
 	return requireOneRow(res, "chain", id)
 }
 
+// CreateChainLink inserts a new chain_links row. Returns ErrDuplicate on (chain_id, sequence) conflict.
 func (r *chainRepo) CreateChainLink(ctx context.Context, link *domain.ChainLink) error {
 	s := model.ChainLinkToStorage(*link)
 	_, err := r.db.ExecContext(ctx,
@@ -120,6 +127,7 @@ func (r *chainRepo) CreateChainLink(ctx context.Context, link *domain.ChainLink)
 	return nil
 }
 
+// ListChainLinks returns all links for a chain ordered by sequence.
 func (r *chainRepo) ListChainLinks(ctx context.Context, chainID string) ([]domain.ChainLink, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, chain_id, sequence, link_type, closing_trade_id, opening_trade_id,

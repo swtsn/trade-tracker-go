@@ -1,3 +1,4 @@
+// Package repository defines interfaces for persisting and retrieving domain entities.
 package repository
 
 import (
@@ -8,6 +9,7 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
+// ListTradesOptions controls pagination and filtering for trade list queries.
 type ListTradesOptions struct {
 	Limit      int
 	Offset     int

@@ -25,10 +25,12 @@ type transactionRepo struct {
 	db *sql.DB
 }
 
+// NewTransactionRepository returns a TransactionRepository backed by the given SQLite database.
 func NewTransactionRepository(db *sql.DB) *transactionRepo {
 	return &transactionRepo{db: db}
 }
 
+// Create inserts a new transaction row. Returns ErrDuplicate if BrokerTxID already exists.
 func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) error {
 	s := model.TransactionToStorage(*tx, time.Now())
 	_, err := r.db.ExecContext(ctx,
@@ -48,6 +50,7 @@ func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) er
 	return nil
 }
 
+// GetByID returns the transaction with the given ID, or ErrNotFound.
 func (r *transactionRepo) GetByID(ctx context.Context, id string) (*domain.Transaction, error) {
 	var row model.FullTransaction
 	err := r.db.QueryRowContext(ctx,
@@ -66,6 +69,7 @@ func (r *transactionRepo) GetByID(ctx context.Context, id string) (*domain.Trans
 	return &tx, nil
 }
 
+// ListByTrade returns all transactions for a trade, ordered by executed_at.
 func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]domain.Transaction, error) {
 	rows, err := r.db.QueryContext(ctx,
 		transactionJoinSelect+` WHERE t.trade_id = ? ORDER BY t.executed_at`, tradeID)
@@ -76,6 +80,7 @@ func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]do
 	return scanTransactionRows(rows)
 }
 
+// ListByAccountAndTimeRange returns all transactions for an account within [from, to], ordered by executed_at.
 func (r *transactionRepo) ListByAccountAndTimeRange(ctx context.Context, accountID string, from, to time.Time) ([]domain.Transaction, error) {
 	rows, err := r.db.QueryContext(ctx,
 		transactionJoinSelect+` WHERE t.account_id = ? AND t.executed_at >= ? AND t.executed_at <= ? ORDER BY t.executed_at`,
@@ -88,6 +93,8 @@ func (r *transactionRepo) ListByAccountAndTimeRange(ctx context.Context, account
 	return scanTransactionRows(rows)
 }
 
+// ExistsByBrokerTxID reports whether a transaction with the given broker-assigned ID already exists
+// for the specified broker and account, enabling idempotent import.
 func (r *transactionRepo) ExistsByBrokerTxID(ctx context.Context, brokerTxID, broker, accountID string) (bool, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx,
@@ -100,6 +107,7 @@ func (r *transactionRepo) ExistsByBrokerTxID(ctx context.Context, brokerTxID, br
 	return count > 0, nil
 }
 
+// scanTransactionRows reads all joined transaction+instrument rows from an open *sql.Rows cursor.
 func scanTransactionRows(rows *sql.Rows) ([]domain.Transaction, error) {
 	var txs []domain.Transaction
 	for rows.Next() {

@@ -8,6 +8,7 @@ Items explicitly deferred from current phases. Revisit when the core system is s
 
 ## Phase 2 / Business Logic
 - **Chain auto-detection** — automatically linking covered calls (and similar) to an existing chain when opened on an underlying with an active chain. Deferred in favor of manual linking only.
+- **CoveredCall strategy reclassification** — when a call is sold against equity held in a prior order, the classifier sees only a single short call and correctly labels it CSP or Single. It cannot detect the covered relationship without position context (knowing an open long equity lot exists for the same underlying). For now, an operator must manually reclassify the trade. A future `StrategyService.Upgrade()` pass could inspect open lots and promote lone short calls to CoveredCall where a matching equity lot exists.
 - **Roll auto-detection scoring** — the rule-scoring algorithm for detecting rolls from raw transaction data. Will be designed as part of the rolling phase.
 - **API-based import** — Tastytrade and Schwab both have APIs. Day-one import is CSV only.
 - **LIFO / average cost lot matching** — FIFO is the initial implementation. Other methods deferred.

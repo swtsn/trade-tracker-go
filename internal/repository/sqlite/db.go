@@ -45,6 +45,8 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// runMigrations applies any pending versioned SQL migrations in sequence.
+// Each migration is applied atomically; already-applied versions are skipped.
 func runMigrations(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version    INTEGER PRIMARY KEY,

@@ -65,7 +65,9 @@ type LegShape struct {
 ### `Classifier`
 
 ```go
-// Classifier applies rules in ascending Priority order (lower number = checked first).
+// Classifier checks rules in registration order and returns the first match.
+// Rules must be mutually exclusive by construction — if two rules match the same
+// leg shape that is a bug in the rules, not a tie to be resolved by priority.
 // Returns StrategyUnknown if no rule matches — this is valid state, not an error.
 type Classifier struct{ rules []Rule }
 
@@ -73,32 +75,36 @@ func New() *Classifier
 func (c *Classifier) Classify(legs []LegShape) domain.StrategyType
 
 type Rule struct {
-    Name     domain.StrategyType
-    Priority int                        // lower = checked sooner; more specific rules get lower numbers
-    Match    func(legs []LegShape) bool // pure function — no DB, no I/O, no side effects
+    Name  domain.StrategyType
+    Match func(legs []LegShape) bool // pure function — no DB, no I/O, no side effects
 }
 ```
 
-### Strategy Rules (priority order, lower = checked first)
+### Strategy Rules
 
-| Priority | Strategy | Legs | Key test |
-|---|---|---|---|
-| 5 | IronButterfly | 4 | IC shape + shortPut.Strike == shortCall.Strike |
-| 10 | IronCondor | 4 | put spread + call spread, same expiry |
-| 15 | CallButterfly | 3 | all calls, same expiry, equidistant strikes, 1-2-1 directions |
-| 15 | PutButterfly | 3 | all puts, same expiry, equidistant strikes, 1-2-1 directions |
-| 20 | CoveredCall | 2 | equity long + call short |
-| 25 | BackRatio | 2 | same type + expiry + direction, different quantities |
-| 30 | Straddle | 2 | put+call, same strike+expiry, same direction |
-| 30 | Strangle | 2 | put+call, different strikes, same expiry, same direction |
-| 30 | CallVertical | 2 | 2 calls, same expiry, different strikes, opposite directions |
-| 30 | PutVertical | 2 | 2 puts, same expiry, different strikes, opposite directions |
-| 35 | Calendar | 2 | same type+strike, different expiry, opposite directions |
-| 35 | Diagonal | 2 | same type, different strike+expiry, opposite directions |
-| 40 | CSP | 1 | put, equity_option, short |
-| 45 | Single | 1 | any option |
-| 45 | Stock | 1 | equity |
-| 45 | Future | 1 | future (non-option) |
+Rules are mutually exclusive by construction. The only structural overlap is
+IronButterfly ⊂ IronCondor — resolved by requiring IronCondor's rule to assert
+`shortPut.Strike != shortCall.Strike`, making the two shapes disjoint.
+
+| Strategy | Legs | Key test |
+|---|---|---|
+| IronButterfly | 4 | put spread + call spread, same expiry, shortPut.Strike == shortCall.Strike |
+| IronCondor | 4 | put spread + call spread, same expiry, shortPut.Strike != shortCall.Strike |
+| BrokenHeartButterfly | 4 | all same option type, same expiry, 2 longs (outer) + 2 shorts (inner) at 4 distinct strikes |
+| Butterfly | 3 | all same option type, same expiry, 3 strikes, equidistant wings, 1-2-1 directions |
+| BrokenWingButterfly | 3 | all same option type, same expiry, 3 strikes, asymmetric wings, 1-2-1 directions |
+| CoveredCall | 2 | equity long + call short, same order |
+| Ratio | 2 | same option type + expiry, opposite directions, qty(short) > qty(long) |
+| BackRatio | 2 | same option type + expiry, opposite directions, qty(long) > qty(short) |
+| Straddle | 2 | put+call, same strike+expiry, same direction |
+| Strangle | 2 | put+call, different strikes, same expiry, same direction |
+| Vertical | 2 | same option type, same expiry, different strikes, opposite directions |
+| Calendar | 2 | same option type + strike, different expiry, opposite directions |
+| Diagonal | 2 | same option type, different strike + expiry, opposite directions |
+| CSP | 1 | short put, equity option |
+| Single | 1 | any single option |
+| Stock | 1 | equity (non-option) |
+| Future | 1 | future (non-option) |
 
 ---
 
@@ -134,7 +140,6 @@ func New() *Classifier {
         ...
         ruleMyNew(),
     }
-    // Slice is sorted by Priority at construction — order here doesn't matter.
     ...
 }
 ```

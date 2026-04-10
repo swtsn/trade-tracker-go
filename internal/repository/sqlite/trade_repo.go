@@ -16,10 +16,12 @@ type tradeRepo struct {
 	db *sql.DB
 }
 
+// NewTradeRepository returns a TradeRepository backed by the given SQLite database.
 func NewTradeRepository(db *sql.DB) *tradeRepo {
 	return &tradeRepo{db: db}
 }
 
+// Create inserts a new trade row. Returns ErrDuplicate if the ID already exists.
 func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 	s := model.TradeToStorage(*trade, time.Now())
 	_, err := r.db.ExecContext(ctx,
@@ -115,6 +117,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	return trades, total, nil
 }
 
+// UpdateStrategy sets the strategy_type for the given trade.
 func (r *tradeRepo) UpdateStrategy(ctx context.Context, id string, strategy domain.StrategyType) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE trades SET strategy_type = ? WHERE id = ?`, string(strategy), id)
@@ -124,6 +127,7 @@ func (r *tradeRepo) UpdateStrategy(ctx context.Context, id string, strategy doma
 	return requireOneRow(res, "trade", id)
 }
 
+// UpdateClosedAt records the close timestamp for the given trade.
 func (r *tradeRepo) UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE trades SET closed_at = ? WHERE id = ?`,

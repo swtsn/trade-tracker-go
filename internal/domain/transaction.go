@@ -6,6 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// Action represents the type of order action executed in a transaction.
 type Action string
 
 const (
@@ -20,6 +21,7 @@ const (
 	ActionExercise   Action = "EXERCISE"
 )
 
+// PositionEffect indicates whether a transaction opens or closes a position.
 type PositionEffect string
 
 const (
@@ -27,6 +29,7 @@ const (
 	PositionEffectClosing PositionEffect = "closing"
 )
 
+// Transaction records a single fill event: one action on one instrument at one price.
 type Transaction struct {
 	ID             string
 	TradeID        string

@@ -14,10 +14,12 @@ type accountRepo struct {
 	db *sql.DB
 }
 
+// NewAccountRepository returns an AccountRepository backed by the given SQLite database.
 func NewAccountRepository(db *sql.DB) *accountRepo {
 	return &accountRepo{db: db}
 }
 
+// Create inserts a new account row. Returns ErrDuplicate if the ID already exists.
 func (r *accountRepo) Create(ctx context.Context, account *domain.Account) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO accounts (id, broker, account_number, name, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -33,12 +35,14 @@ func (r *accountRepo) Create(ctx context.Context, account *domain.Account) error
 	return nil
 }
 
+// GetByID returns the account with the given ID, or ErrNotFound if it doesn't exist.
 func (r *accountRepo) GetByID(ctx context.Context, id string) (*domain.Account, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, broker, account_number, name, created_at FROM accounts WHERE id = ?`, id)
 	return scanAccount(row)
 }
 
+// List returns all accounts ordered by creation time.
 func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, broker, account_number, name, created_at FROM accounts ORDER BY created_at`)
@@ -64,6 +68,7 @@ func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	return accounts, rows.Err()
 }
 
+// scanAccount reads one account from a query row, returning ErrNotFound for sql.ErrNoRows.
 func scanAccount(row *sql.Row) (*domain.Account, error) {
 	var a domain.Account
 	var createdAt string
