@@ -209,7 +209,7 @@ func TestPositionRepository(t *testing.T) {
 		acc := seedAccount(t, ctx, repos)
 		inst := seedOptionInstrument(t, ctx, repos, "SPY", 500, domain.OptionTypePut, time.Date(2025, 12, 19, 0, 0, 0, 0, time.UTC))
 		stockInst := seedEquityInstrument(t, ctx, repos, "SPY")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
 
 		openTx := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionSTO, 1, 3.50, domain.PositionEffectOpening, time.Now())
 		closeTx := seedTransaction(t, ctx, repos, acc, trade, stockInst, domain.ActionAssignment, 100, 500, domain.PositionEffectClosing, time.Now().Add(time.Hour))

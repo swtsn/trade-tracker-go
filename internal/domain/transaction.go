@@ -35,6 +35,7 @@ type Transaction struct {
 	ID             string
 	TradeID        string
 	BrokerTxID     string
+	BrokerOrderID  string // broker's order ID; groups legs of the same multi-leg order. Support is broker-specific — may be empty if the broker does not expose an order ID.
 	Broker         string
 	AccountID      string
 	Instrument     Instrument

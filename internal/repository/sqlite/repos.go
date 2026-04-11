@@ -9,12 +9,12 @@ import (
 
 // Repos bundles all repository implementations backed by a single SQLite database.
 type Repos struct {
-	Accounts       repository.AccountRepository
-	Instruments    repository.InstrumentRepository
-	Transactions   repository.TransactionRepository
-	Trades         repository.TradeRepository
-	Positions      repository.PositionRepository
-	Chains         repository.ChainRepository
+	Accounts     repository.AccountRepository
+	Instruments  repository.InstrumentRepository
+	Transactions repository.TransactionRepository
+	Trades       repository.TradeRepository
+	Positions    repository.PositionRepository
+	Chains       repository.ChainRepository
 
 	db *sql.DB
 }
@@ -26,13 +26,13 @@ func OpenRepos(path string) (*Repos, error) {
 		return nil, fmt.Errorf("open repos: %w", err)
 	}
 	return &Repos{
-		Accounts:       NewAccountRepository(db),
-		Instruments:    NewInstrumentRepository(db),
-		Transactions:   NewTransactionRepository(db),
-		Trades:         NewTradeRepository(db),
-		Positions:      NewPositionRepository(db),
-		Chains:         NewChainRepository(db),
-		db:             db,
+		Accounts:     NewAccountRepository(db),
+		Instruments:  NewInstrumentRepository(db),
+		Transactions: NewTransactionRepository(db),
+		Trades:       NewTradeRepository(db),
+		Positions:    NewPositionRepository(db),
+		Chains:       NewChainRepository(db),
+		db:           db,
 	}, nil
 }
 

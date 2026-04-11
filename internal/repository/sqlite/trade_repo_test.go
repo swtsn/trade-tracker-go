@@ -62,7 +62,7 @@ func TestTradeRepository(t *testing.T) {
 		t0 := time.Now()
 
 		open1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, t0)
-		open2 := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, t0.Add(time.Hour))
+		open2 := seedTrade(t, ctx, repos, acc, domain.StrategySingle, t0.Add(time.Hour))
 		closed := seedTrade(t, ctx, repos, acc, domain.StrategySingle, t0.Add(2*time.Hour))
 		require.NoError(t, repos.Trades.UpdateClosedAt(ctx, closed.ID, t0.Add(3*time.Hour)))
 
@@ -79,10 +79,10 @@ func TestTradeRepository(t *testing.T) {
 		acc := seedAccount(t, ctx, repos)
 		trade := seedTrade(t, ctx, repos, acc, domain.StrategyUnknown, time.Now())
 
-		require.NoError(t, repos.Trades.UpdateStrategy(ctx, trade.ID, domain.StrategyCSP))
+		require.NoError(t, repos.Trades.UpdateStrategy(ctx, trade.ID, domain.StrategySingle))
 		got, err := repos.Trades.GetByID(ctx, trade.ID)
 		require.NoError(t, err)
-		assert.Equal(t, domain.StrategyCSP, got.StrategyType)
+		assert.Equal(t, domain.StrategySingle, got.StrategyType)
 	})
 
 	t.Run("update closed at", func(t *testing.T) {
