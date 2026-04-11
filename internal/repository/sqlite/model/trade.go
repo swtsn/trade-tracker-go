@@ -47,7 +47,8 @@ func (s Trade) ToDomain() (domain.Trade, error) {
 	return trade, nil
 }
 
-// TradeToStorage converts a domain.Trade to its flat storage struct.
+// TradeToStorage converts a domain.Trade to its flat storage struct,
+// recording the current time as created_at.
 func TradeToStorage(trade domain.Trade, now time.Time) Trade {
 	s := Trade{
 		ID:           trade.ID,

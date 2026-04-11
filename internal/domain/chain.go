@@ -6,6 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// LinkType represents the kind of event that connects trades within a chain.
 type LinkType string
 
 const (

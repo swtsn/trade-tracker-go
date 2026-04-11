@@ -10,14 +10,18 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
+// accountRepo implements the AccountRepository interface.
 type accountRepo struct {
 	db *sql.DB
 }
 
+// NewAccountRepository creates a new accountRepo backed by the given database.
 func NewAccountRepository(db *sql.DB) *accountRepo {
 	return &accountRepo{db: db}
 }
 
+// Create inserts a new account into the database.
+// Returns domain.ErrDuplicate if the account ID already exists.
 func (r *accountRepo) Create(ctx context.Context, account *domain.Account) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO accounts (id, broker, account_number, name, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -33,12 +37,15 @@ func (r *accountRepo) Create(ctx context.Context, account *domain.Account) error
 	return nil
 }
 
+// GetByID retrieves an account by its ID.
+// Returns domain.ErrNotFound if the account does not exist.
 func (r *accountRepo) GetByID(ctx context.Context, id string) (*domain.Account, error) {
 	row := r.db.QueryRowContext(ctx,
 		`SELECT id, broker, account_number, name, created_at FROM accounts WHERE id = ?`, id)
 	return scanAccount(row)
 }
 
+// List retrieves all accounts ordered by creation time.
 func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, broker, account_number, name, created_at FROM accounts ORDER BY created_at`)
@@ -64,6 +71,8 @@ func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	return accounts, rows.Err()
 }
 
+// scanAccount scans a single account row into a domain.Account.
+// Returns domain.ErrNotFound if the row contains no data.
 func scanAccount(row *sql.Row) (*domain.Account, error) {
 	var a domain.Account
 	var createdAt string

@@ -21,14 +21,18 @@ const transactionJoinSelect = `
 	FROM transactions t
 	JOIN instruments i ON t.instrument_id = i.id`
 
+// transactionRepo implements the TransactionRepository interface.
 type transactionRepo struct {
 	db *sql.DB
 }
 
+// NewTransactionRepository creates a new transactionRepo backed by the given database.
 func NewTransactionRepository(db *sql.DB) *transactionRepo {
 	return &transactionRepo{db: db}
 }
 
+// Create inserts a new transaction into the database.
+// Returns domain.ErrDuplicate if a transaction with the same BrokerTxID already exists.
 func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) error {
 	s := model.TransactionToStorage(*tx, time.Now())
 	_, err := r.db.ExecContext(ctx,
@@ -48,6 +52,8 @@ func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) er
 	return nil
 }
 
+// GetByID retrieves a transaction by its ID, including its associated instrument.
+// Returns domain.ErrNotFound if the transaction does not exist.
 func (r *transactionRepo) GetByID(ctx context.Context, id string) (*domain.Transaction, error) {
 	var row model.FullTransaction
 	err := r.db.QueryRowContext(ctx,
@@ -66,6 +72,7 @@ func (r *transactionRepo) GetByID(ctx context.Context, id string) (*domain.Trans
 	return &tx, nil
 }
 
+// ListByTrade retrieves all transactions for a given trade, ordered by execution time.
 func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]domain.Transaction, error) {
 	rows, err := r.db.QueryContext(ctx,
 		transactionJoinSelect+` WHERE t.trade_id = ? ORDER BY t.executed_at`, tradeID)
@@ -76,6 +83,8 @@ func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]do
 	return scanTransactionRows(rows)
 }
 
+// ListByAccountAndTimeRange retrieves all transactions for an account within a time range,
+// ordered by execution time.
 func (r *transactionRepo) ListByAccountAndTimeRange(ctx context.Context, accountID string, from, to time.Time) ([]domain.Transaction, error) {
 	rows, err := r.db.QueryContext(ctx,
 		transactionJoinSelect+` WHERE t.account_id = ? AND t.executed_at >= ? AND t.executed_at <= ? ORDER BY t.executed_at`,
@@ -100,6 +109,7 @@ func (r *transactionRepo) ExistsByBrokerTxID(ctx context.Context, brokerTxID, br
 	return count > 0, nil
 }
 
+// scanTransactionRows scans transaction rows into domain.Transaction objects.
 func scanTransactionRows(rows *sql.Rows) ([]domain.Transaction, error) {
 	var txs []domain.Transaction
 	for rows.Next() {

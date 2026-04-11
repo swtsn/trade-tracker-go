@@ -2,6 +2,7 @@ package domain
 
 import "time"
 
+// StrategyType represents the type of trading strategy for a trade.
 type StrategyType string
 
 const (
@@ -24,6 +25,9 @@ const (
 	StrategyFuture        StrategyType = "future"
 )
 
+// Trade represents a single trade comprising one or more transactions.
+// A trade may be long (buy to open, sell to close) or short (sell to open, buy to close).
+// It may also include options with associated strikes and expirations.
 type Trade struct {
 	ID           string
 	AccountID    string

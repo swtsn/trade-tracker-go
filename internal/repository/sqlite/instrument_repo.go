@@ -10,10 +10,12 @@ import (
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
+// instrumentRepo implements the InstrumentRepository interface.
 type instrumentRepo struct {
 	db *sql.DB
 }
 
+// NewInstrumentRepository creates a new instrumentRepo backed by the given database.
 func NewInstrumentRepository(db *sql.DB) *instrumentRepo {
 	return &instrumentRepo{db: db}
 }
@@ -35,6 +37,8 @@ func (r *instrumentRepo) Upsert(ctx context.Context, instrument *domain.Instrume
 	return nil
 }
 
+// GetByID retrieves an instrument by its deterministic ID.
+// Returns domain.ErrNotFound if the instrument does not exist.
 func (r *instrumentRepo) GetByID(ctx context.Context, id string) (*domain.Instrument, error) {
 	var s model.Instrument
 	row := r.db.QueryRowContext(ctx,

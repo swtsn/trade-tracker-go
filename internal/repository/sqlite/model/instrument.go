@@ -1,3 +1,5 @@
+// Package model defines storage representations (flat, SQL-scannable structs)
+// that bridge between domain types and database tables.
 package model
 
 import (
@@ -24,9 +26,9 @@ type Instrument struct {
 	ExchangeCode       sql.NullString
 }
 
-// ScanDest returns scan destinations in SELECT column order:
+// ScanDest returns the pointers to scan destinations in SELECT column order:
 // id, symbol, asset_class, expiration, strike, option_type,
-// multiplier, osi_symbol, futures_expiry_month, exchange_code
+// multiplier, osi_symbol, futures_expiry_month, exchange_code.
 func (i *Instrument) ScanDest() []any {
 	return []any{
 		&i.ID, &i.Symbol, &i.AssetClass,
@@ -85,7 +87,8 @@ func (i Instrument) ToDomain() (domain.Instrument, error) {
 	return inst, nil
 }
 
-// InstrumentToStorage converts a domain.Instrument to its storage representation.
+// InstrumentToStorage converts a domain.Instrument to its flat storage representation,
+// computing the deterministic instrument ID.
 func InstrumentToStorage(inst domain.Instrument) Instrument {
 	s := Instrument{
 		ID:         inst.InstrumentID(),

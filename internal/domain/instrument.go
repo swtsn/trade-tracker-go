@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// AssetClass represents the category of a financial instrument.
 type AssetClass string
 
 const (
@@ -17,6 +18,7 @@ const (
 	AssetClassFutureOption AssetClass = "future_option"
 )
 
+// OptionType represents the type of an options contract.
 type OptionType string
 
 const (
@@ -24,6 +26,7 @@ const (
 	OptionTypePut  OptionType = "P"
 )
 
+// OptionDetails contains the contract-specific parameters for an options instrument.
 type OptionDetails struct {
 	Expiration time.Time
 	Strike     decimal.Decimal
@@ -32,11 +35,14 @@ type OptionDetails struct {
 	OSI        string
 }
 
+// FutureDetails contains the contract-specific parameters for a futures instrument.
 type FutureDetails struct {
 	ExpiryMonth  time.Time
 	ExchangeCode string
 }
 
+// Instrument represents a tradeable security: equity, option, or future.
+// It is identified deterministically by its symbol and contract-specific fields.
 type Instrument struct {
 	Symbol     string
 	AssetClass AssetClass

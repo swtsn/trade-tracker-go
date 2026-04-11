@@ -1,3 +1,4 @@
+// Package sqlite provides a SQLite-backed implementation of the repository interfaces.
 package sqlite
 
 import (
@@ -45,6 +46,7 @@ func Open(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// runMigrations checks the schema_migrations table and applies any pending migrations.
 func runMigrations(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version    INTEGER PRIMARY KEY,
