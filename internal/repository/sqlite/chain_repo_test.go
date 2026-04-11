@@ -19,8 +19,8 @@ func TestChainRepository(t *testing.T) {
 	t.Run("create chain and get by id with links", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now())
-		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now().Add(time.Hour))
+		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now().Add(time.Hour))
 
 		chain := &domain.Chain{
 			ID:               uuid.New().String(),
@@ -62,13 +62,13 @@ func TestChainRepository(t *testing.T) {
 	t.Run("chain link sequence uniqueness", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
 		chain := &domain.Chain{
-			ID:              uuid.New().String(),
-			AccountID:       acc.ID,
+			ID:               uuid.New().String(),
+			AccountID:        acc.ID,
 			UnderlyingSymbol: "QQQ",
-			OriginalTradeID: trade.ID,
-			CreatedAt:       time.Now().UTC().Truncate(time.Second),
+			OriginalTradeID:  trade.ID,
+			CreatedAt:        time.Now().UTC().Truncate(time.Second),
 		}
 		require.NoError(t, repos.Chains.CreateChain(ctx, chain))
 
@@ -95,7 +95,7 @@ func TestChainRepository(t *testing.T) {
 	t.Run("list chains by account open only", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
 
 		openChain := &domain.Chain{ID: uuid.New().String(), AccountID: acc.ID, UnderlyingSymbol: "SPY", OriginalTradeID: trade.ID, CreatedAt: time.Now().UTC().Truncate(time.Second)}
 		closedAt := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
@@ -117,13 +117,13 @@ func TestChainRepository(t *testing.T) {
 	t.Run("update chain closed", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyCSP, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
 		chain := &domain.Chain{
-			ID:              uuid.New().String(),
-			AccountID:       acc.ID,
+			ID:               uuid.New().String(),
+			AccountID:        acc.ID,
 			UnderlyingSymbol: "IWM",
-			OriginalTradeID: trade.ID,
-			CreatedAt:       time.Now().UTC().Truncate(time.Second),
+			OriginalTradeID:  trade.ID,
+			CreatedAt:        time.Now().UTC().Truncate(time.Second),
 		}
 		require.NoError(t, repos.Chains.CreateChain(ctx, chain))
 
