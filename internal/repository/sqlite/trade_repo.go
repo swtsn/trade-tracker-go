@@ -12,14 +12,18 @@ import (
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
+// tradeRepo implements the TradeRepository interface.
 type tradeRepo struct {
 	db *sql.DB
 }
 
+// NewTradeRepository creates a new tradeRepo backed by the given database.
 func NewTradeRepository(db *sql.DB) *tradeRepo {
 	return &tradeRepo{db: db}
 }
 
+// Create inserts a new trade into the database.
+// Returns domain.ErrDuplicate if a trade with the same ID already exists.
 func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 	s := model.TradeToStorage(*trade, time.Now())
 	_, err := r.db.ExecContext(ctx,
@@ -36,6 +40,8 @@ func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 	return nil
 }
 
+// GetByID retrieves a trade by its ID with all associated transactions loaded.
+// Returns domain.ErrNotFound if the trade does not exist.
 func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, error) {
 	var s model.Trade
 	err := r.db.QueryRowContext(ctx,
@@ -63,6 +69,10 @@ func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, erro
 	return &trade, nil
 }
 
+// ListByAccount retrieves trades for an account with optional filtering and pagination.
+// Returns both the matching trades and the total count of trades satisfying the filters.
+// Transactions are not loaded; use GetByID for full trade detail.
+// Returns an error if OpenOnly and ClosedOnly are both true.
 func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts repository.ListTradesOptions) ([]domain.Trade, int, error) {
 	if opts.OpenOnly && opts.ClosedOnly {
 		return nil, 0, fmt.Errorf("ListTradesOptions: OpenOnly and ClosedOnly are mutually exclusive")
@@ -115,6 +125,8 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	return trades, total, nil
 }
 
+// UpdateStrategy updates the strategy type of a trade.
+// Returns domain.ErrNotFound if the trade does not exist.
 func (r *tradeRepo) UpdateStrategy(ctx context.Context, id string, strategy domain.StrategyType) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE trades SET strategy_type = ? WHERE id = ?`, string(strategy), id)
@@ -124,6 +136,8 @@ func (r *tradeRepo) UpdateStrategy(ctx context.Context, id string, strategy doma
 	return requireOneRow(res, "trade", id)
 }
 
+// UpdateClosedAt updates the closed_at timestamp of a trade.
+// Returns domain.ErrNotFound if the trade does not exist.
 func (r *tradeRepo) UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE trades SET closed_at = ? WHERE id = ?`,
@@ -134,7 +148,8 @@ func (r *tradeRepo) UpdateClosedAt(ctx context.Context, id string, closedAt time
 	return requireOneRow(res, "trade", id)
 }
 
-// loadTransactionsForTrade fetches transactions with their instruments for a given trade.
+// loadTransactionsForTrade fetches all transactions with their instruments for a given trade,
+// ordered by execution time.
 func loadTransactionsForTrade(ctx context.Context, db *sql.DB, tradeID string) ([]domain.Transaction, error) {
 	rows, err := db.QueryContext(ctx,
 		transactionJoinSelect+` WHERE t.trade_id = ? ORDER BY t.executed_at`, tradeID)
@@ -145,7 +160,8 @@ func loadTransactionsForTrade(ctx context.Context, db *sql.DB, tradeID string) (
 	return scanTransactionRows(rows)
 }
 
-// requireOneRow returns ErrNotFound if the result affected zero rows.
+// requireOneRow checks that an UPDATE or DELETE result affected exactly one row.
+// Returns domain.ErrNotFound if no rows were affected.
 func requireOneRow(res sql.Result, entity, id string) error {
 	n, err := res.RowsAffected()
 	if err != nil {

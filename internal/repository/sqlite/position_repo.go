@@ -31,14 +31,17 @@ const lotJoinSelect = `
 	FROM position_lots pl
 	JOIN instruments i ON pl.instrument_id = i.id`
 
+// positionRepo implements the PositionRepository interface.
 type positionRepo struct {
 	db *sql.DB
 }
 
+// NewPositionRepository creates a new positionRepo backed by the given database.
 func NewPositionRepository(db *sql.DB) *positionRepo {
 	return &positionRepo{db: db}
 }
 
+// UpsertPosition inserts a new position or updates an existing one (by account_id and instrument_id).
 func (r *positionRepo) UpsertPosition(ctx context.Context, pos *domain.Position) error {
 	s := model.PositionToStorage(*pos)
 	_, err := r.db.ExecContext(ctx,
@@ -60,6 +63,8 @@ func (r *positionRepo) UpsertPosition(ctx context.Context, pos *domain.Position)
 	return nil
 }
 
+// GetPosition retrieves a position by account and instrument, including its instrument details.
+// Returns domain.ErrNotFound if no position exists for that account/instrument pair.
 func (r *positionRepo) GetPosition(ctx context.Context, accountID, instrumentID string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
@@ -79,6 +84,8 @@ func (r *positionRepo) GetPosition(ctx context.Context, accountID, instrumentID 
 	return &pos, nil
 }
 
+// ListOpenPositions retrieves all open positions for an account (closed_at IS NULL),
+// ordered by opened_at.
 func (r *positionRepo) ListOpenPositions(ctx context.Context, accountID string) ([]domain.Position, error) {
 	rows, err := r.db.QueryContext(ctx,
 		positionJoinSelect+` WHERE p.account_id = ? AND p.closed_at IS NULL ORDER BY p.opened_at`,
@@ -104,6 +111,7 @@ func (r *positionRepo) ListOpenPositions(ctx context.Context, accountID string) 
 	return positions, rows.Err()
 }
 
+// CreateLot inserts a new position lot (opening transaction).
 func (r *positionRepo) CreateLot(ctx context.Context, lot *domain.PositionLot) error {
 	s := model.LotToStorage(*lot)
 	_, err := r.db.ExecContext(ctx,
@@ -122,6 +130,8 @@ func (r *positionRepo) CreateLot(ctx context.Context, lot *domain.PositionLot) e
 	return nil
 }
 
+// GetLot retrieves a position lot by its ID, including its instrument details.
+// Returns domain.ErrNotFound if the lot does not exist.
 func (r *positionRepo) GetLot(ctx context.Context, id string) (*domain.PositionLot, error) {
 	var row model.PositionLot
 	err := r.db.QueryRowContext(ctx,
@@ -154,6 +164,8 @@ func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, 
 	return scanLotRows(rows)
 }
 
+// CloseLot atomically records a lot closing and updates the lot's remaining quantity.
+// If closedAt is non-nil, the lot is marked as fully closed.
 func (r *positionRepo) CloseLot(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, closedAt *time.Time) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -192,6 +204,7 @@ func (r *positionRepo) CloseLot(ctx context.Context, closing *domain.LotClosing,
 	return tx.Commit()
 }
 
+// ListLotClosings retrieves all closing events for a lot, ordered by closed_at.
 func (r *positionRepo) ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, lot_id, closing_tx_id, closed_quantity, close_price, close_fees,
@@ -222,6 +235,7 @@ func (r *positionRepo) ListLotClosings(ctx context.Context, lotID string) ([]dom
 	return closings, rows.Err()
 }
 
+// scanLotRows scans position lot rows into domain.PositionLot objects.
 func scanLotRows(rows *sql.Rows) ([]domain.PositionLot, error) {
 	var lots []domain.PositionLot
 	for rows.Next() {

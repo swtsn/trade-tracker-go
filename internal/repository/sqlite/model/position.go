@@ -24,7 +24,7 @@ type Position struct {
 	Inst         Instrument
 }
 
-// ScanDest returns scan destinations matching the SELECT column order.
+// ScanDest returns the pointers to scan destinations matching the SELECT column order.
 func (r *Position) ScanDest() []any {
 	return append(
 		[]any{
@@ -125,7 +125,7 @@ type PositionLot struct {
 	Inst              Instrument
 }
 
-// ScanDest returns scan destinations matching the SELECT column order.
+// ScanDest returns the pointers to scan destinations matching the SELECT column order.
 func (r *PositionLot) ScanDest() []any {
 	return append(
 		[]any{

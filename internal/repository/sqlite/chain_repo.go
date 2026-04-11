@@ -11,14 +11,18 @@ import (
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
+// chainRepo implements the ChainRepository interface.
 type chainRepo struct {
 	db *sql.DB
 }
 
+// NewChainRepository creates a new chainRepo backed by the given database.
 func NewChainRepository(db *sql.DB) *chainRepo {
 	return &chainRepo{db: db}
 }
 
+// CreateChain inserts a new chain into the database.
+// Returns domain.ErrDuplicate if a chain with the same ID already exists.
 func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error {
 	s := model.ChainToStorage(*chain)
 	_, err := r.db.ExecContext(ctx,
@@ -35,6 +39,8 @@ func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error 
 	return nil
 }
 
+// GetChainByID retrieves a chain by its ID with all associated links loaded.
+// Returns domain.ErrNotFound if the chain does not exist.
 func (r *chainRepo) GetChainByID(ctx context.Context, id string) (*domain.Chain, error) {
 	var s model.Chain
 	err := r.db.QueryRowContext(ctx,
@@ -61,6 +67,8 @@ func (r *chainRepo) GetChainByID(ctx context.Context, id string) (*domain.Chain,
 	return &chain, nil
 }
 
+// ListChainsByAccount retrieves chains for an account with optional filtering for open chains.
+// Links are not loaded; use GetChainByID for full chain detail.
 func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error) {
 	query := `SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at
 	          FROM chains WHERE account_id = ?`
@@ -90,6 +98,8 @@ func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, o
 	return chains, rows.Err()
 }
 
+// UpdateChainClosed updates the closed_at timestamp of a chain.
+// Returns domain.ErrNotFound if the chain does not exist.
 func (r *chainRepo) UpdateChainClosed(ctx context.Context, id string, closedAt time.Time) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE chains SET closed_at = ? WHERE id = ?`,
@@ -101,6 +111,8 @@ func (r *chainRepo) UpdateChainClosed(ctx context.Context, id string, closedAt t
 	return requireOneRow(res, "chain", id)
 }
 
+// CreateChainLink inserts a new link within a chain.
+// Returns domain.ErrDuplicate if a link with the same chain_id and sequence already exists.
 func (r *chainRepo) CreateChainLink(ctx context.Context, link *domain.ChainLink) error {
 	s := model.ChainLinkToStorage(*link)
 	_, err := r.db.ExecContext(ctx,
@@ -120,6 +132,7 @@ func (r *chainRepo) CreateChainLink(ctx context.Context, link *domain.ChainLink)
 	return nil
 }
 
+// ListChainLinks retrieves all links for a chain, ordered by sequence.
 func (r *chainRepo) ListChainLinks(ctx context.Context, chainID string) ([]domain.ChainLink, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, chain_id, sequence, link_type, closing_trade_id, opening_trade_id,

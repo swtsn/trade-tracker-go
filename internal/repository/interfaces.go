@@ -1,3 +1,4 @@
+// Package repository defines the repository interface layer for accessing domain data.
 package repository
 
 import (
@@ -8,6 +9,7 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
+// ListTradesOptions specifies filter and pagination parameters for trade queries.
 type ListTradesOptions struct {
 	Limit      int
 	Offset     int
@@ -15,17 +17,20 @@ type ListTradesOptions struct {
 	ClosedOnly bool
 }
 
+// AccountRepository provides access to account data.
 type AccountRepository interface {
 	Create(ctx context.Context, account *domain.Account) error
 	GetByID(ctx context.Context, id string) (*domain.Account, error)
 	List(ctx context.Context) ([]domain.Account, error)
 }
 
+// InstrumentRepository provides access to instrument data.
 type InstrumentRepository interface {
 	Upsert(ctx context.Context, instrument *domain.Instrument) error
 	GetByID(ctx context.Context, id string) (*domain.Instrument, error)
 }
 
+// TransactionRepository provides access to transaction data.
 type TransactionRepository interface {
 	Create(ctx context.Context, tx *domain.Transaction) error
 	GetByID(ctx context.Context, id string) (*domain.Transaction, error)
@@ -34,6 +39,7 @@ type TransactionRepository interface {
 	ExistsByBrokerTxID(ctx context.Context, brokerTxID, broker, accountID string) (bool, error)
 }
 
+// TradeRepository provides access to trade data.
 type TradeRepository interface {
 	Create(ctx context.Context, trade *domain.Trade) error
 	// GetByID returns the trade with its Transactions slice populated.
@@ -45,6 +51,7 @@ type TradeRepository interface {
 	UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error
 }
 
+// PositionRepository provides access to position and lot data.
 type PositionRepository interface {
 	UpsertPosition(ctx context.Context, position *domain.Position) error
 	GetPosition(ctx context.Context, accountID, instrumentID string) (*domain.Position, error)
@@ -59,6 +66,7 @@ type PositionRepository interface {
 	ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error)
 }
 
+// ChainRepository provides access to chain and chain link data.
 type ChainRepository interface {
 	CreateChain(ctx context.Context, chain *domain.Chain) error
 	// GetChainByID returns the chain with its Links slice populated.

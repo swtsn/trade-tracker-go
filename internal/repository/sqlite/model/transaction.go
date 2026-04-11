@@ -33,7 +33,7 @@ type FullTransaction struct {
 	Inst Instrument
 }
 
-// ScanDest returns scan destinations matching the SELECT column order:
+// ScanDest returns the pointers to scan destinations matching the SELECT column order:
 // all transaction columns, then all instrument columns.
 func (r *FullTransaction) ScanDest() []any {
 	return append(
@@ -90,7 +90,8 @@ func (r FullTransaction) ToDomain() (domain.Transaction, error) {
 	return tx, nil
 }
 
-// TransactionToStorage converts a domain.Transaction to its flat storage struct.
+// TransactionToStorage converts a domain.Transaction to its flat storage struct,
+// recording the current time as created_at.
 func TransactionToStorage(tx domain.Transaction, now time.Time) Transaction {
 	s := Transaction{
 		ID:             tx.ID,
