@@ -21,6 +21,7 @@ type Position struct {
 	UpdatedAt    string
 	ClosedAt     sql.NullString
 	ChainID      sql.NullString
+	StrategyType string
 	Inst         Instrument
 }
 
@@ -30,7 +31,7 @@ func (r *Position) ScanDest() []any {
 		[]any{
 			&r.ID, &r.AccountID, &r.InstrumentID,
 			&r.Quantity, &r.CostBasis, &r.RealizedPnL,
-			&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt, &r.ChainID,
+			&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt, &r.ChainID, &r.StrategyType,
 		},
 		r.Inst.ScanDest()...,
 	)
@@ -64,14 +65,15 @@ func (r Position) ToDomain() (domain.Position, error) {
 	}
 
 	p := domain.Position{
-		ID:          r.ID,
-		AccountID:   r.AccountID,
-		Instrument:  inst,
-		Quantity:    qty,
-		CostBasis:   costBasis,
-		RealizedPnL: realizedPnL,
-		OpenedAt:    openedAt,
-		UpdatedAt:   updatedAt,
+		ID:           r.ID,
+		AccountID:    r.AccountID,
+		Instrument:   inst,
+		Quantity:     qty,
+		CostBasis:    costBasis,
+		RealizedPnL:  realizedPnL,
+		OpenedAt:     openedAt,
+		UpdatedAt:    updatedAt,
+		StrategyType: domain.StrategyType(r.StrategyType),
 	}
 	if r.ClosedAt.Valid {
 		t, err := time.Parse(time.RFC3339, r.ClosedAt.String)
@@ -89,6 +91,10 @@ func (r Position) ToDomain() (domain.Position, error) {
 
 // PositionToStorage converts a domain.Position to its flat storage struct.
 func PositionToStorage(pos domain.Position) Position {
+	strategyType := string(pos.StrategyType)
+	if strategyType == "" {
+		strategyType = string(domain.StrategyUnknown)
+	}
 	s := Position{
 		ID:           pos.ID,
 		AccountID:    pos.AccountID,
@@ -98,6 +104,7 @@ func PositionToStorage(pos domain.Position) Position {
 		RealizedPnL:  pos.RealizedPnL.String(),
 		OpenedAt:     pos.OpenedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    pos.UpdatedAt.UTC().Format(time.RFC3339),
+		StrategyType: strategyType,
 	}
 	if pos.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: pos.ClosedAt.UTC().Format(time.RFC3339), Valid: true}

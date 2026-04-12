@@ -9,17 +9,18 @@ import (
 // Position is a materialized cache of current open state per (account, instrument).
 // Written in the same DB transaction as lot changes. Never written independently.
 type Position struct {
-	ID          string
-	AccountID   string
-	Instrument  Instrument
-	Quantity    decimal.Decimal // signed: negative = short; 0 = closed
-	CostBasis   decimal.Decimal
-	RealizedPnL decimal.Decimal
-	OpenedAt    time.Time
-	UpdatedAt   time.Time
-	ClosedAt    *time.Time
-	ChainID     *string
-	Lots        []PositionLot // open lots only
+	ID           string
+	AccountID    string
+	Instrument   Instrument
+	Quantity     decimal.Decimal // signed: negative = short; 0 = closed
+	CostBasis    decimal.Decimal
+	RealizedPnL  decimal.Decimal
+	OpenedAt     time.Time
+	UpdatedAt    time.Time
+	ClosedAt     *time.Time
+	ChainID      *string
+	StrategyType StrategyType  // classified from the position's own legs; independent of any trade
+	Lots         []PositionLot // open lots only
 }
 
 // PositionLot is the source of truth. One row per opening transaction.
