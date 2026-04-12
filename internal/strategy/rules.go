@@ -201,9 +201,9 @@ func ruleBrokenHeartButterfly() Rule {
 			// Handles both long (1,-1,-1,1) and short (-1,1,1,-1) variants.
 			// ruleIronButterfly/ruleIronCondor fire first and require mixed put/call legs,
 			// so a 4-leg all-same-type trade never reaches those rules.
-			if !(sorted[0].Quantity.Sign() == sorted[3].Quantity.Sign() &&
-				sorted[1].Quantity.Sign() == sorted[2].Quantity.Sign() &&
-				sorted[0].Quantity.Sign() != sorted[1].Quantity.Sign()) {
+			if sorted[0].Quantity.Sign() != sorted[3].Quantity.Sign() ||
+				sorted[1].Quantity.Sign() != sorted[2].Quantity.Sign() ||
+				sorted[0].Quantity.Sign() == sorted[1].Quantity.Sign() {
 				return false
 			}
 			// All four legs must be equal size. Outer-equal and inner-equal are

@@ -81,7 +81,7 @@ func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, o
 	if err != nil {
 		return nil, fmt.Errorf("list chains: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var chains []domain.Chain
 	for rows.Next() {
@@ -143,7 +143,7 @@ func (r *chainRepo) ListChainLinks(ctx context.Context, chainID string) ([]domai
 	if err != nil {
 		return nil, fmt.Errorf("list chain links: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var links []domain.ChainLink
 	for rows.Next() {

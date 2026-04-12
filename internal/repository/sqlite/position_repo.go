@@ -95,7 +95,7 @@ func (r *positionRepo) ListOpenPositions(ctx context.Context, accountID string) 
 	if err != nil {
 		return nil, fmt.Errorf("list open positions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var positions []domain.Position
 	for rows.Next() {
@@ -161,7 +161,7 @@ func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, 
 	if err != nil {
 		return nil, fmt.Errorf("list open lots: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanLotRows(rows)
 }
 
@@ -172,7 +172,7 @@ func (r *positionRepo) CloseLot(ctx context.Context, closing *domain.LotClosing,
 	if err != nil {
 		return fmt.Errorf("close lot: begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	s := model.LotClosingToStorage(*closing)
 	_, err = tx.ExecContext(ctx,
@@ -216,7 +216,7 @@ func (r *positionRepo) ListLotClosings(ctx context.Context, lotID string) ([]dom
 	if err != nil {
 		return nil, fmt.Errorf("list lot closings: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var closings []domain.LotClosing
 	for rows.Next() {

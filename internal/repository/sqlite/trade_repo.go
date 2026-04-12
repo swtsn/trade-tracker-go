@@ -105,7 +105,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	if err != nil {
 		return nil, 0, fmt.Errorf("list trades: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var trades []domain.Trade
 	for rows.Next() {
@@ -156,7 +156,7 @@ func loadTransactionsForTrade(ctx context.Context, db *sql.DB, tradeID string) (
 	if err != nil {
 		return nil, fmt.Errorf("load transactions for trade: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanTransactionRows(rows)
 }
 

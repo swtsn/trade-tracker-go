@@ -52,7 +52,7 @@ func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var accounts []domain.Account
 	for rows.Next() {
