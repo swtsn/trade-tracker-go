@@ -15,7 +15,7 @@ import (
 const positionJoinSelect = `
 	SELECT
 		p.id, p.account_id, p.instrument_id, p.quantity, p.cost_basis, p.realized_pnl,
-		p.opened_at, p.updated_at, p.closed_at, p.chain_id,
+		p.opened_at, p.updated_at, p.closed_at, p.chain_id, p.strategy_type,
 		i.id, i.symbol, i.asset_class, i.expiration, i.strike, i.option_type,
 		i.multiplier, i.osi_symbol, i.futures_expiry_month, i.exchange_code
 	FROM positions p
@@ -45,17 +45,18 @@ func NewPositionRepository(db *sql.DB) *positionRepo {
 func (r *positionRepo) UpsertPosition(ctx context.Context, pos *domain.Position) error {
 	s := model.PositionToStorage(*pos)
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO positions (id, account_id, instrument_id, quantity, cost_basis, realized_pnl, opened_at, updated_at, closed_at, chain_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO positions (id, account_id, instrument_id, quantity, cost_basis, realized_pnl, opened_at, updated_at, closed_at, chain_id, strategy_type)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(account_id, instrument_id) DO UPDATE SET
-		   quantity     = excluded.quantity,
-		   cost_basis   = excluded.cost_basis,
-		   realized_pnl = excluded.realized_pnl,
-		   updated_at   = excluded.updated_at,
-		   closed_at    = excluded.closed_at,
-		   chain_id     = excluded.chain_id`,
+		   quantity      = excluded.quantity,
+		   cost_basis    = excluded.cost_basis,
+		   realized_pnl  = excluded.realized_pnl,
+		   updated_at    = excluded.updated_at,
+		   closed_at     = excluded.closed_at,
+		   chain_id      = excluded.chain_id,
+		   strategy_type = excluded.strategy_type`,
 		s.ID, s.AccountID, s.InstrumentID, s.Quantity, s.CostBasis, s.RealizedPnL,
-		s.OpenedAt, s.UpdatedAt, s.ClosedAt, s.ChainID,
+		s.OpenedAt, s.UpdatedAt, s.ClosedAt, s.ChainID, s.StrategyType,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert position: %w", err)

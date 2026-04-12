@@ -65,6 +65,7 @@ func runMigrations(db *sql.DB) error {
 		{2, "migrations/002_chains.sql"},
 		{3, "migrations/003_import_history.sql"},
 		{5, "migrations/005_position_closed_at.sql"},
+		{6, "migrations/006_position_strategy.sql"},
 	}
 
 	for _, m := range migrations {

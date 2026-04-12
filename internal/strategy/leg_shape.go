@@ -25,6 +25,29 @@ type LegShape struct {
 	Quantity   decimal.Decimal   // positive = long (BTO/BUY), negative = short (STO/SELL)
 }
 
+// FromLots normalizes a slice of open position lots into LegShapes for classification.
+// Only lots with a non-zero RemainingQuantity are included. RemainingQuantity is signed
+// (negative = short), matching the LegShape.Quantity sign convention.
+func FromLots(lots []domain.PositionLot) []LegShape {
+	var legs []LegShape
+	for _, lot := range lots {
+		if lot.RemainingQuantity.IsZero() {
+			continue
+		}
+		leg := LegShape{
+			AssetClass: lot.Instrument.AssetClass,
+			Quantity:   lot.RemainingQuantity,
+		}
+		if lot.Instrument.Option != nil {
+			leg.OptionType = lot.Instrument.Option.OptionType
+			leg.Strike = lot.Instrument.Option.Strike
+			leg.Expiration = lot.Instrument.Option.Expiration
+		}
+		legs = append(legs, leg)
+	}
+	return legs
+}
+
 // FromTransactions normalizes a slice of transactions into LegShapes for classification.
 // Only opening legs with a recognized direction action are included.
 // Transactions with an unrecognized Action (e.g. ActionExercise, ActionExpiration) are
