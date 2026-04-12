@@ -26,20 +26,20 @@ func Open(path string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("pragma journal_mode: %w", err)
 	}
 	if _, err := db.Exec(`PRAGMA synchronous=NORMAL`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("pragma synchronous: %w", err)
 	}
 	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("pragma foreign_keys: %w", err)
 	}
 
 	if err := runMigrations(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("migrations: %w", err)
 	}
 
@@ -83,16 +83,16 @@ func runMigrations(db *sql.DB) error {
 		// TOCTOU race when multiple processes share the same DB file.
 		var count int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, m.version).Scan(&count); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("check migration %d: %w", m.version, err)
 		}
 		if count > 0 {
-			tx.Rollback()
+			_ = tx.Rollback()
 			continue
 		}
 
 		if _, err := tx.Exec(string(sqlBytes)); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("exec migration %d: %w", m.version, err)
 		}
 
@@ -100,7 +100,7 @@ func runMigrations(db *sql.DB) error {
 			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
 			m.version, time.Now().UTC().Format(time.RFC3339),
 		); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return fmt.Errorf("record migration %d: %w", m.version, err)
 		}
 

@@ -45,6 +45,9 @@ This is a standard Go project structured for scalability:
 
 ## Development Notes
 
+- Run `make test` after every code change to verify formatting, linting, and tests all pass.
+
+
 - Keep `cmd/` minimal—it should mostly handle CLI bootstrapping and delegate to internal packages.
 - Use `internal/` packages to encapsulate business logic and prevent external dependencies on internal APIs.
 - Tests should live alongside the code they test (e.g., `internal/core/trade_test.go` for `internal/core/trade.go`).

@@ -79,7 +79,7 @@ func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]do
 	if err != nil {
 		return nil, fmt.Errorf("list transactions by trade: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanTransactionRows(rows)
 }
 
@@ -93,7 +93,7 @@ func (r *transactionRepo) ListByAccountAndTimeRange(ctx context.Context, account
 	if err != nil {
 		return nil, fmt.Errorf("list transactions by time range: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanTransactionRows(rows)
 }
 

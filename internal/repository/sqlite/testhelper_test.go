@@ -18,7 +18,7 @@ func openTestDB(t *testing.T) *sqlite.Repos {
 	t.Helper()
 	repos, err := sqlite.OpenRepos(":memory:")
 	require.NoError(t, err)
-	t.Cleanup(func() { repos.Close() })
+	t.Cleanup(func() { _ = repos.Close() })
 	return repos
 }
 
