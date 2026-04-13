@@ -4,7 +4,8 @@
       "Bash(go build:*)",
       "Bash(./bin/trade-tracker)",
       "Bash(go test:*)",
-      "Bash(make lint:*)"
+      "Bash(make lint:*)",
+      "Bash(make test:*)"
     ]
   }
 }

@@ -108,6 +108,10 @@ func InstrumentToStorage(inst domain.Instrument) Instrument {
 	}
 
 	if inst.Future != nil {
+		// Stored as RFC3339 for full precision, but InstrumentID() hashes only the
+		// "2006-01" month portion. This is intentional: two timestamps in the same
+		// month produce the same instrument ID, which is the correct identity for
+		// futures contracts regardless of the precision of the source data.
 		s.FuturesExpiryMonth = sql.NullString{
 			String: inst.Future.ExpiryMonth.UTC().Format(time.RFC3339),
 			Valid:  !inst.Future.ExpiryMonth.IsZero(),

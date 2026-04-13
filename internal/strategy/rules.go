@@ -318,6 +318,8 @@ func ruleCoveredCall() Rule {
 
 // ruleRatio returns a Rule that matches a ratio spread: options of the same type and expiration where
 // total short quantity exceeds total long quantity.
+// Cross-expiry ratio spreads (diagonal ratios) are not matched here; they fall through
+// to StrategyUnknown. This is intentional — diagonal ratios are deferred to a future rule.
 func ruleRatio() Rule {
 	return Rule{
 		Name: domain.StrategyRatio,
@@ -341,6 +343,7 @@ func ruleRatio() Rule {
 
 // ruleBackRatio returns a Rule that matches a back ratio spread: options of the same type and expiration where
 // total long quantity exceeds total short quantity.
+// Cross-expiry back ratios are not matched here for the same reason as ruleRatio.
 func ruleBackRatio() Rule {
 	return Rule{
 		Name: domain.StrategyBackRatio,

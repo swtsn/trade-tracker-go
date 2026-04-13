@@ -60,6 +60,10 @@ func runMigrations(db *sql.DB) error {
 		version int
 		path    string
 	}
+	// Version 4 is intentionally absent — a draft migration was written and then
+	// superseded before ever being applied to any database. Existing DBs already
+	// have version 5 recorded; adding a 004 now would apply out of order on those
+	// databases. Do not backfill version 4.
 	migrations := []migration{
 		{1, "migrations/001_initial_schema.sql"},
 		{2, "migrations/002_chains.sql"},

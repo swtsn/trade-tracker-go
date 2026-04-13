@@ -178,12 +178,13 @@ Pipeline orchestration. Receives already-normalized domain transactions.
 type ImportResult struct {
     Imported int
     Skipped  int           // duplicates by BrokerTxID
+    Failed   int           // trade groups that errored
     Errors   []ImportError
 }
 
 type ImportError struct {
-    BrokerTxID string
-    Err        error
+    TradeID string
+    Err     error
 }
 ```
 
@@ -191,16 +192,29 @@ type ImportError struct {
 1. Dedup: `txRepo.ExistsByBrokerTxID` — skip already-seen transactions
 2. Upsert instruments for all non-duped transactions
 3. Group non-duped transactions by `TradeID` (pre-grouped by the importer)
-4. For each trade group:
+4. For each trade group (continue on error — do not abort the whole import):
    a. Classify strategy: `classifier.Classify(strategy.FromTransactions(group))`
-   b. Create Trade record
-   c. Create Transaction records
-   d. For each opening leg: `positionSvc.OpenLot(tx)`
-   e. For each closing leg: `positionSvc.CloseLots(tx)`
-5. `positionSvc.RefreshPosition` for each affected (accountID, instrumentID)
+   b. In a single DB transaction:
+      - Create Trade record
+      - Create Transaction records (close-before-open within the group)
+      - For each closing leg: `positionSvc.CloseLots(tx)`
+      - For each opening leg: `positionSvc.OpenLot(tx)`
+      - `positionSvc.RefreshPosition` for each affected (accountID, instrumentID)
+   c. On error: roll back the group's DB transaction, append to `Errors`, increment `Failed`, continue
+5. Return `ImportResult` — never return a top-level error unless the import cannot proceed at all (e.g., DB connection lost)
 
-Trade grouping is the importer's responsibility. Each `domain.Transaction` arrives with
-`TradeID` already set to a consistent value for co-legs of the same order.
+**Error handling:** failures are per-trade-group. A failing group rolls back all its DB writes
+atomically (trade, transactions, lots, lot_closings, position update). The group's `TradeID` and
+error are recorded in `ImportResult.Errors`. Other groups are unaffected.
+
+**Trade grouping:** the importer's responsibility. Each `domain.Transaction` arrives with `TradeID`
+set to a UUID that identifies co-legs of the same order. `BrokerOrderID` carries the broker's raw
+order identifier (e.g. Tastytrade order number) for audit; it is not used for grouping in this
+layer. `ImportService` groups by `TradeID` and trusts it as-is.
+
+**Instrument upsert:** instrument ID is a SHA-256 hash of its unique fields, computed in the
+storage model layer (`internal/repository/sqlite/model/instrument.go`). `ImportService` calls
+`instrumentRepo.Upsert` for each distinct instrument before processing trades.
 
 ### `position_service.go`
 
@@ -211,7 +225,10 @@ Creates a new `PositionLot`. Signed quantity: BTO/BUY = positive, STO/SELL = neg
 
 **`CloseLots(ctx, tx domain.Transaction) ([]domain.LotClosing, error)`**
 FIFO-matches a closing transaction against open lots for (accountID, instrumentID).
+Lot order: `opened_at ASC` (oldest first). On tie: `id ASC` (UUIDv7, also time-ordered).
 Returns one `LotClosing` per lot consumed. Updates lot remaining quantities.
+The closing transaction's signed quantity is derived from `tx.Quantity` plus the sign of
+the matched lot (`CloseLots` checks lot sign to determine direction).
 Also updates the position's `RealizedPnL` incrementally.
 
 P&L formula per closed lot:
@@ -242,13 +259,21 @@ GetPnL(ctx, chainID string) (domain.PnL, error)  // sum of lot_closings.realized
 
 ### `analytics_service.go`
 
-Aggregation over persisted data.
+Aggregation over persisted data. No unrealized P&L — the system does not query live instrument prices.
 
 ```go
 GetSymbolPnL(ctx, accountID, symbol string) (*SymbolPnL, error)
 GetStrategyPerformance(ctx, accountID string) ([]StrategyPerformance, error)
 GetAccountSummary(ctx, accountID string) (*AccountSummary, error)
 ```
+
+`AccountSummary` fields:
+- `TotalRealizedPnL decimal.Decimal`
+- `OpenSymbols []string` — distinct underlying symbols with at least one open position lot
+
+`SymbolPnL` fields: sum of `realized_pnl` from `lot_closings` for the given symbol.
+
+`StrategyPerformance` fields: per `strategy_type` — trade count, total realized P&L, win count, loss count.
 
 ---
 

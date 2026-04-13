@@ -10,6 +10,7 @@ Items explicitly deferred from current phases. Revisit when the core system is s
 
 ## Phase 2 / Business Logic
 - **Strategy rule refactor** — the rule constructors in `internal/strategy/rules.go` are candidates for refactoring. No specific direction decided yet; revisit after more rules are in place and patterns emerge.
+- **Richer `GetAccountSummary`** — currently returns only total realized P&L and symbols with open positions. Candidates for expansion: per-symbol breakdown, win rate, average P&L per trade, max drawdown, annualized return, and rolling performance windows. Design when there is enough data to validate which metrics are actually useful.
 - **Complex calendar strategies** — ratio calendars, straddle swaps, strangle swaps, and similar multi-leg time-spread structures are not yet classified. Add rules once the core calendar/diagonal shapes are validated in production.
 - **Classifier mutual-exclusion test** — the classifier's stated invariant is that rules must be mutually exclusive by construction, but this is only verified by inspection today. Investigate whether a property-based or exhaustive test can assert that no two rules match the same leg shape (e.g. using fuzzing or a synthetic corpus of known shapes).
 - **Chain auto-detection** — automatically linking covered calls (and similar) to an existing chain when opened on an underlying with an active chain. Deferred in favor of manual linking only.

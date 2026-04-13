@@ -151,11 +151,13 @@ func (r *positionRepo) GetLot(ctx context.Context, id string) (*domain.PositionL
 	return &lot, nil
 }
 
-// ListOpenLotsByInstrument returns open lots ordered by opened_at ASC (FIFO order).
+// ListOpenLotsByInstrument returns open lots ordered by opened_at ASC, id ASC (FIFO order).
+// The '0' comparison is safe because shopspring/decimal always serialises zero as the
+// exact string "0" — no other representation ("0.0", "-0") is produced by this codebase.
 func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, instrumentID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
 		lotJoinSelect+` WHERE pl.account_id = ? AND pl.instrument_id = ? AND pl.remaining_quantity != '0'
-		 ORDER BY pl.opened_at ASC`,
+		 ORDER BY pl.opened_at ASC, pl.id ASC`,
 		accountID, instrumentID,
 	)
 	if err != nil {
