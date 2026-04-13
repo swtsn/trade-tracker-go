@@ -9,19 +9,32 @@ transactions, match lots, compute P&L, and classify strategies.
 ## Scope
 
 - Strategy classifier: `internal/strategy/`
+- Broker parsers: `internal/broker/tastytrade/`, `internal/broker/schwab/`
 - Services: `internal/service/`
 - All services operate exclusively on `domain.*` types — no storage models, no broker-specific
   formats cross this boundary
+
+### Status
+
+| Component | Status |
+|---|---|
+| Strategy classifier | ✅ done |
+| Tastytrade parser | ✅ done |
+| Schwab parser | ✅ done |
+| Import service | ✅ done |
+| Position service | 🔲 upcoming |
+| Chain service | 🔲 upcoming |
+| Analytics service | 🔲 upcoming |
 
 ---
 
 ## Importer Boundary
 
-The importer (Phase 3) is solely responsible for parsing a broker file and producing
+The broker parsers are solely responsible for parsing a broker file and producing
 `[]domain.Transaction`. The import service is solely responsible for everything after that.
 
 ```
-Phase 3 Importer              Phase 2 Service Layer
+Broker Parsers                Phase 2 Service Layer
 ──────────────────            ────────────────────────────────────────
 tastytrade/parser.go  ──┐
 schwab/parser.go      ──┤──► []domain.Transaction ──► ImportService.Import()
@@ -29,7 +42,7 @@ schwab/parser.go      ──┤──► []domain.Transaction ──► ImportSe
 ```
 
 This separation means the import service is fully testable without file I/O, and the
-importer is fully testable without a database. If importers become background jobs calling
+parsers are fully testable without a database. If importers become background jobs calling
 the gRPC API in the future, the boundary stays identical — the gRPC handler maps
 proto → domain and calls `ImportService.Import()`.
 
@@ -42,7 +55,7 @@ proto → domain and calls `ImportService.Import()`.
 | File | Contents |
 |---|---|
 | `leg_shape.go` | `LegShape` struct; `FromTransactions()` normalizer |
-| `classifier.go` | `Classifier`, `Rule` types; `New()`, `Classify()` |
+| `classifier.go` | `Classifier`, `Rule` types; `NewClassifier()`, `Classify()` |
 | `rules.go` | One function per strategy returning a `Rule` |
 | `classifier_test.go` | Table-driven tests for every strategy + edge cases |
 
@@ -71,7 +84,7 @@ type LegShape struct {
 // Returns StrategyUnknown if no rule matches — this is valid state, not an error.
 type Classifier struct{ rules []Rule }
 
-func New() *Classifier
+func NewClassifier() *Classifier
 func (c *Classifier) Classify(legs []LegShape) domain.StrategyType
 
 type Rule struct {
@@ -121,155 +134,142 @@ StrategyMyNew StrategyType = "my_new"
 ```go
 func ruleMyNew() Rule {
     return Rule{
-        Name:     domain.StrategyMyNew,
-        Priority: 25, // set relative to existing rules; lower = checked first
+        Name:  domain.StrategyMyNew,
         Match: func(legs []LegShape) bool {
             // Pure function — no DB, no I/O, no side effects.
-            // Return true if legs match this strategy shape.
-            // Use helper functions like allSameExpiry(), allOptions(),
-            // countByOptionType(), sortByStrike() from rules.go.
         },
     }
 }
 ```
 
-**Step 3** — Register the rule in `internal/strategy/classifier.go` `New()`:
+**Step 3** — Register the rule in `internal/strategy/classifier.go` `NewClassifier()`:
 ```go
-func New() *Classifier {
-    rules := []Rule{
+func NewClassifier() *Classifier {
+    return &Classifier{rules: []Rule{
         ...
         ruleMyNew(),
-    }
-    ...
+    }}
 }
 ```
 
-**Step 4** — Add a test in `internal/strategy/classifier_test.go`:
-```go
-{
-    name:   "MyNew — exact match",
-    legs:   []LegShape{ /* ... */ },
-    expect: domain.StrategyMyNew,
-},
-{
-    name:   "MyNew — not matched when similar but wrong structure",
-    legs:   []LegShape{ /* ... */ },
-    expect: domain.StrategyUnknown,
-},
-```
-
-Tests should cover at minimum: an exact match, a near-miss that should not match, and
-legs in a different order (rules must be order-independent — sort before inspecting).
+**Step 4** — Add a test in `internal/strategy/classifier_test.go`. Cover at minimum: an
+exact match, a near-miss that should not match, and legs in a different order (rules must
+be order-independent — sort before inspecting).
 
 > **Rules must be pure functions.** If classification requires position context (e.g.,
 > knowing there is an existing long stock lot to detect CoveredCall when only a call was
-> sold), that upgrade step lives in a future `StrategyService.Upgrade()` — not in the
-> rule. The base classifier never touches the database.
+> sold), that logic lives in a future service layer upgrade step — not in the rule. The
+> base classifier never touches the database.
 
 ---
 
-## Services (`internal/service/`)
+## Import Service (`internal/service/import_service.go`)
 
-### `import_service.go`
-
-Pipeline orchestration. Receives already-normalized domain transactions.
+Pipeline orchestration. Receives already-normalized domain transactions from a broker
+parser and persists them.
 
 ```go
 type ImportResult struct {
-    Imported int
-    Skipped  int           // duplicates by BrokerTxID
+    Imported int          // trade groups fully persisted with all hooks successful
+    Skipped  int          // transactions skipped due to duplicate BrokerTxID
+    Failed   int          // trade groups where a DB write or hook failed
     Errors   []ImportError
 }
+// Invariant: Imported + Failed + Skipped == total input transaction groups (after dedup).
 
 type ImportError struct {
-    BrokerTxID string
-    Err        error
+    TradeID  string
+    HookName string // empty for DB errors; set to hook name for hook errors
+    Err      error
+}
+
+type PostImportHook struct {
+    Name string
+    Run  func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) error
 }
 ```
 
 **`Import(ctx, []domain.Transaction) (*ImportResult, error)`** — steps in order:
-1. Dedup: `txRepo.ExistsByBrokerTxID` — skip already-seen transactions
-2. Upsert instruments for all non-duped transactions
-3. Group non-duped transactions by `TradeID` (pre-grouped by the importer)
-4. For each trade group:
-   a. Classify strategy: `classifier.Classify(strategy.FromTransactions(group))`
-   b. Create Trade record
-   c. Create Transaction records
-   d. For each opening leg: `positionSvc.OpenLot(tx)`
-   e. For each closing leg: `positionSvc.CloseLots(tx)`
-5. `positionSvc.RefreshPosition` for each affected (accountID, instrumentID)
 
-Trade grouping is the importer's responsibility. Each `domain.Transaction` arrives with
-`TradeID` already set to a consistent value for co-legs of the same order.
+1. **Dedup** — single bulk `FilterExistingBrokerTxIDs` query; skip already-seen transactions
+2. **Upsert instruments** — one upsert per unique `InstrumentID` across fresh transactions
+3. **Group by `TradeID`** — preserving first-seen order; `TradeID` is set by the parser
+4. **Per group:**
+   - Classify strategy via `StrategyClassifier.Classify(strategy.FromTransactions(group))`
+   - Create `Trade` record
+   - Create `Transaction` records — closing legs first, then opening legs
+   - Run post-import hooks (e.g. position updates); hook failure counts as Failed
 
-### `position_service.go`
+A top-level error is returned only for fatal infrastructure failures (e.g. lost DB
+connection). Per-group failures are recorded in `result.Errors` and processing continues.
 
-Lot state management. Called by `ImportService`; not called directly from outside.
-
-**`OpenLot(ctx, tx domain.Transaction) (*domain.PositionLot, error)`**
-Creates a new `PositionLot`. Signed quantity: BTO/BUY = positive, STO/SELL = negative.
-
-**`CloseLots(ctx, tx domain.Transaction) ([]domain.LotClosing, error)`**
-FIFO-matches a closing transaction against open lots for (accountID, instrumentID).
-Returns one `LotClosing` per lot consumed. Updates lot remaining quantities.
-Also updates the position's `RealizedPnL` incrementally.
-
-P&L formula per closed lot:
+**Known atomicity gap:** trade and transaction rows are written in separate DB calls with
+no wrapping SQL transaction. A mid-group failure leaves an orphaned trade row. Drift
+detection query:
+```sql
+SELECT t.id FROM trades t
+LEFT JOIN transactions tx ON tx.trade_id = t.id
+WHERE tx.id IS NULL;
 ```
-multiplier = instrument multiplier (1 for equity, 100 for equity_option, etc.)
-proportion = closedQty / |openQuantity|   // for prorating open fees
+Full fix deferred to repository-layer transaction propagation.
 
-long  lot: pnl = (closePrice - openPrice) × closedQty × multiplier − closeFees − openFees×proportion
-short lot: pnl = (openPrice - closePrice) × closedQty × multiplier − closeFees − openFees×proportion
-```
+---
 
-**`RefreshPosition(ctx, accountID, instrumentID string) error`**
-Recalculates and upserts the materialized `Position`:
-- `Quantity` = sum of `remaining_quantity` across all open lots (signed)
-- `CostBasis` = sum of (`remaining_quantity × open_price`) across all open lots
-- `RealizedPnL` unchanged (accumulated incrementally by `CloseLots`)
+## Broker Parsers (`internal/broker/`)
 
-### `chain_service.go`
-
-Manual chain lifecycle management. Chain linking is never automatic.
-
+Both parsers implement the `broker.Parser` interface:
 ```go
-CreateChain(ctx, accountID, broker, underlyingSymbol, originalTradeID string) (*domain.Chain, error)
-AddLink(ctx, chainID string, link domain.ChainLink) (*domain.ChainLink, error)  // auto-sequences
-CloseChain(ctx, chainID string) error
-GetPnL(ctx, chainID string) (domain.PnL, error)  // sum of lot_closings.realized_pnl for chain's lots
+type Parser interface {
+    Parse(r io.Reader, accountID string) ([]domain.Transaction, error)
+}
 ```
 
-### `analytics_service.go`
+**Tastytrade** (`tastytrade/parser.go`): Parses the "Transactions" CSV export. Supports
+equities, equity options, and future options. Order # is used as the group key for
+deterministic TradeID generation; rows without an Order # (expirations, etc.) each become
+their own trade.
 
-Aggregation over persisted data.
+**Schwab** (`schwab/parser.go`): Parses the "Account Trade History" CSV export. Supports
+stocks, ETFs, equity options, futures, and future options (including 32nds price notation
+for Treasury futures). Multi-leg orders are identified by the leading `Exec Time` column —
+continuation rows have an empty time field. Fees are not present in this export.
 
-```go
-GetSymbolPnL(ctx, accountID, symbol string) (*SymbolPnL, error)
-GetStrategyPerformance(ctx, accountID string) ([]StrategyPerformance, error)
-GetAccountSummary(ctx, accountID string) (*AccountSummary, error)
-```
+Both parsers:
+- Generate deterministic `TradeID` and `BrokerTxID` via `brokerutil.HashKey` (SHA-256) so
+  re-importing the same file produces identical IDs
+- Return an error on malformed instrument data; short rows are silently skipped
 
 ---
 
 ## Testing
 
 - `go test ./internal/strategy/...` — no DB required; all tests are pure function calls
-- `go test ./internal/service/...` — use `:memory:` SQLite (same pattern as repo tests)
+- `go test ./internal/service/...` — uses `:memory:` SQLite
 
-Key service test scenarios:
-- 3 opening transactions → 3 open lots created, positions upserted
-- 1 closing transaction → FIFO matches oldest lot, lot_closing created, P&L correct
-- Closing transaction spanning 2 lots → partial close of lot[0], full close of lot[1]
-- Duplicate BrokerTxID on re-import → skipped, no error, Skipped count = 1
-- Chain P&L = sum of lot_closings.realized_pnl
+Key service test scenarios covered:
+- Basic import: transactions persisted, `Imported` count correct
+- Dedup: re-importing the same file yields `Skipped` count, no duplicates
+- Strategy classification: vertical spread classified as `StrategyVertical`
+- Closing-first ordering: closing legs written before opening legs
+- Multiple trade groups in one import batch
+- Post-import hook invocation
+- Hook failure: group counted as `Failed`, not `Imported`
+- Partial transaction failure: orphaned trade documented and tested
 
 ---
 
-## Done When
+## Done When (phase 2 complete)
 
 - `go build ./...` passes
-- `go test ./internal/strategy/... ./internal/service/...` passes
+- `go test ./...` passes
 - All strategy shapes in the table above have at least one passing test
-- ImportService can process a set of manually-constructed domain transactions and produce
-  correct lots, lot_closings, and positions
+- ImportService processes manually-constructed domain transactions and persists correct
+  trades and transactions
+- Position service, chain service, and analytics service implemented and tested
+
+---
+
+## Position Service — Upcoming
+
+The position service (lot tracking, FIFO matching, P&L) will be designed and implemented
+as the next step in phase 2. No design is recorded here yet.

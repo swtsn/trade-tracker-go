@@ -1,10 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go build:*)",
+      "Bash(go:*)",
       "Bash(./bin/trade-tracker)",
-      "Bash(go test:*)",
-      "Bash(make lint:*)"
+      "Bash(make:*)",
+      "Bash(grep -n \"^Account\\\\|^,Exec Time\\\\|^$\" /repos/trade-tracker-go/data/2026-04-06-AccountStatement-029.csv)",
+      "Bash(awk -F',' '{print $6}')",
+      "Bash(git stash:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(awk -F',' '{print $7}')"
     ]
   }
 }

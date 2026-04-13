@@ -43,11 +43,14 @@ type FutureDetails struct {
 
 // Instrument represents a tradeable security: equity, option, or future.
 // It is identified deterministically by its symbol and contract-specific fields.
+// FuturesRoot is set only for future options and identifies the root product
+// (e.g. "/NG") for contract spec lookup. It is not stored in the instruments table.
 type Instrument struct {
-	Symbol     string
-	AssetClass AssetClass
-	Option     *OptionDetails
-	Future     *FutureDetails
+	Symbol      string
+	AssetClass  AssetClass
+	Option      *OptionDetails
+	Future      *FutureDetails
+	FuturesRoot string // e.g. "/NG" for a /NGK26 option; empty for non-future-options
 }
 
 // InstrumentID returns the deterministic SHA-256 hash ID for this instrument.
