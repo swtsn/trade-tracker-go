@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
@@ -107,6 +109,48 @@ func (r *transactionRepo) ExistsByBrokerTxID(ctx context.Context, brokerTxID, br
 		return false, fmt.Errorf("exists by broker_tx_id: %w", err)
 	}
 	return count > 0, nil
+}
+
+// FilterExistingBrokerTxIDs returns the subset of keys that already exist in the DB,
+// using a single round-trip with an IN clause on the composite key.
+func (r *transactionRepo) FilterExistingBrokerTxIDs(ctx context.Context, keys []repository.BrokerTxKey) (map[repository.BrokerTxKey]bool, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
+	// Build composite key strings: "brokerTxID|broker|accountID"
+	composites := make([]string, len(keys))
+	args := make([]any, len(keys))
+	for i, k := range keys {
+		composites[i] = k.BrokerTxID + "|" + k.Broker + "|" + k.AccountID
+		args[i] = composites[i]
+	}
+
+	placeholders := strings.Repeat("?,", len(keys))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	rows, err := r.db.QueryContext(ctx,
+		fmt.Sprintf(
+			`SELECT broker_tx_id, broker, account_id FROM transactions
+			 WHERE broker_tx_id || '|' || broker || '|' || account_id IN (%s)`,
+			placeholders,
+		),
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("filter existing broker tx ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[repository.BrokerTxKey]bool)
+	for rows.Next() {
+		var k repository.BrokerTxKey
+		if err := rows.Scan(&k.BrokerTxID, &k.Broker, &k.AccountID); err != nil {
+			return nil, fmt.Errorf("scan broker tx key: %w", err)
+		}
+		result[k] = true
+	}
+	return result, rows.Err()
 }
 
 // scanTransactionRows scans transaction rows into domain.Transaction objects.

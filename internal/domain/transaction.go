@@ -34,7 +34,7 @@ const (
 type Transaction struct {
 	ID             string
 	TradeID        string
-	BrokerTxID     string
+	BrokerTxID     string // synthetic stable identifier derived from broker-specific fields (e.g. order ID + leg index); used for idempotent import dedup.
 	BrokerOrderID  string // broker's order ID; groups legs of the same multi-leg order. Support is broker-specific — may be empty if the broker does not expose an order ID.
 	Broker         string
 	AccountID      string

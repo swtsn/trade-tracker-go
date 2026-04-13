@@ -30,6 +30,13 @@ type InstrumentRepository interface {
 	GetByID(ctx context.Context, id string) (*domain.Instrument, error)
 }
 
+// BrokerTxKey uniquely identifies a broker transaction for deduplication purposes.
+type BrokerTxKey struct {
+	BrokerTxID string
+	Broker     string
+	AccountID  string
+}
+
 // TransactionRepository provides access to transaction data.
 type TransactionRepository interface {
 	Create(ctx context.Context, tx *domain.Transaction) error
@@ -37,6 +44,9 @@ type TransactionRepository interface {
 	ListByTrade(ctx context.Context, tradeID string) ([]domain.Transaction, error)
 	ListByAccountAndTimeRange(ctx context.Context, accountID string, from, to time.Time) ([]domain.Transaction, error)
 	ExistsByBrokerTxID(ctx context.Context, brokerTxID, broker, accountID string) (bool, error)
+	// FilterExistingBrokerTxIDs returns the subset of keys that already exist in the DB.
+	// Callers can subtract this set from the full input to identify new transactions.
+	FilterExistingBrokerTxIDs(ctx context.Context, keys []BrokerTxKey) (map[BrokerTxKey]bool, error)
 }
 
 // TradeRepository provides access to trade data.
@@ -64,6 +74,14 @@ type PositionRepository interface {
 	// Pass a non-nil closedAt when the lot is fully closed.
 	CloseLot(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, closedAt *time.Time) error
 	ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error)
+}
+
+// ContractSpecRepository provides read access to futures contract specifications.
+// Rows are seeded by migration and treated as write-once reference data.
+type ContractSpecRepository interface {
+	// Get returns the spec string for a futures root symbol (e.g. "/NG" → "1/10000").
+	// Returns domain.ErrNotFound if the root symbol is not registered.
+	Get(ctx context.Context, rootSymbol string) (string, error)
 }
 
 // ChainRepository provides access to chain and chain link data.
