@@ -65,22 +65,10 @@ func (s *PositionService) OpenLot(ctx context.Context, tx domain.Transaction) (*
 // Broker parsers that emit signed quantities for sell/short transactions must strip the
 // sign before passing the transaction to this method.
 //
-// NOTE: each CloseLot repo call commits its own DB transaction. If a failure occurs
-// after one or more lots have been committed but before UpsertPosition completes, the
-// position's RealizedPnL will be permanently understated relative to the actual sum of
-// lot_closings.realized_pnl for the instrument. There is no automatic compensation.
-// To detect drift run:
-//
-//	SELECT p.id, p.realized_pnl, COALESCE(SUM(lc.realized_pnl), 0) AS lot_sum
-//	FROM positions p
-//	LEFT JOIN position_lots pl ON pl.instrument_id = p.instrument_id
-//	                           AND pl.account_id   = p.account_id
-//	LEFT JOIN lot_closings lc ON lc.lot_id = pl.id
-//	GROUP BY p.id
-//	HAVING p.realized_pnl != lot_sum;
-//
-// Full cross-operation atomicity requires transaction propagation at the ImportService
-// layer (deferred — see docs/future.md).
+// NOTE: each CloseLot repo call commits its own DB transaction independently.
+// Partial failure can leave position.realized_pnl inconsistent with lot_closings.
+// See docs/future.md "Transaction propagation across service calls" for the failure
+// mode, detection query, and remediation plan.
 func (s *PositionService) CloseLots(ctx context.Context, tx domain.Transaction) ([]domain.LotClosing, error) {
 	instrumentID := tx.Instrument.InstrumentID()
 
