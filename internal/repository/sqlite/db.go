@@ -64,9 +64,12 @@ func runMigrations(db *sql.DB) error {
 		{1, "migrations/001_initial_schema.sql"},
 		{2, "migrations/002_chains.sql"},
 		{3, "migrations/003_import_history.sql"},
+		// Version 4 was a position_lots migration that was reverted before merge;
+		// the slot is intentionally vacant to preserve the numbered sequence.
 		{5, "migrations/005_position_closed_at.sql"},
 		{6, "migrations/006_position_strategy.sql"},
 		{7, "migrations/007_contract_spec.sql"},
+		{8, "migrations/008_drop_tx_chain_id.sql"},
 	}
 
 	for _, m := range migrations {

@@ -22,8 +22,9 @@ transactions, match lots, compute P&L, and classify strategies.
 | Tastytrade parser | ✅ done |
 | Schwab parser | ✅ done |
 | Import service | ✅ done |
+| Contract spec table | ✅ done |
 | Position service | 🔲 upcoming |
-| Chain service | 🔲 upcoming |
+| Chain service | ✅ done |
 | Analytics service | 🔲 upcoming |
 
 ---
@@ -269,7 +270,61 @@ Key service test scenarios covered:
 
 ---
 
+## Chain Service (`internal/service/chain_service.go`)
+
+Post-import pass that detects chains from the transaction log. Must be called after the
+position service has processed lots.
+
+### Chain lifecycle
+
+- **Starts:** opening-only trade (all legs `PositionEffectOpening`) with no prior chain context.
+- **Continues:** mixed trade (at least one closing + at least one opening leg) — a roll or adjustment.
+- **Ends:** close-only trade AND no open lots remain in the chain (includes expiration).
+
+### Attribution heuristic
+
+Closing leg's instrument → open lots for that instrument → those lots' `chain_id`. Same option
+contract in same account is always the same position, so attribution is unambiguous.
+
+### `DetectChains(ctx, accountID)`
+
+Processes all trades chronologically. Per trade:
+
+1. **Opening-only** → create `Chain`, stamp `chain_id` on opened lots.
+2. **Mixed** → resolve `chain_id` from closed lots → stamp same `chain_id` on new opening lots →
+   create `ChainLink` (LinkType: roll/assignment/exercise).
+3. **Close-only** → resolve `chain_id` from closed lots → if no open lots remain, mark chain closed.
+
+Idempotent: trades whose opening lots already carry a `chain_id` are skipped.
+
+### `chain_id` placement
+
+Stored on `position_lots` only. Chain history is fully reconstructable from lots:
+- `position_lots.opening_tx_id → transactions.trade_id` → opening trades
+- `lot_closings.closing_tx_id → transactions.trade_id` → closing trades
+
+The `chain_id` column on `transactions` was dropped in migration 008.
+
+### Repository additions
+
+`PositionRepository`:
+- `ListLotsByOpeningTxIDs` — batch lookup by opening_tx_id (idempotency gate)
+- `ListLotClosingsByClosingTxIDs` — batch lookup for resolving chain_id from closings
+- `ListOpenLotsByChain` — check whether any open lots remain in a chain
+- `UpdateLotChainID` — stamp chain_id onto a lot
+
+`ChainRepository`:
+- `GetChainPnL` — `SUM(lot_closings.realized_pnl)` for all lots with this chain_id; summed in Go
+
 ## Position Service — Upcoming
 
 The position service (lot tracking, FIFO matching, P&L) will be designed and implemented
 as the next step in phase 2. No design is recorded here yet.
+
+---
+
+## Initial Import — Special Handling
+
+TODO: The initial import (bulk load of historical data into an empty DB) needs dedicated
+design discussion before implementation. Key questions include ordering, lot-match
+correctness across the full history, and chain detection sequencing.

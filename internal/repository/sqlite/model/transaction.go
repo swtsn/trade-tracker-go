@@ -1,7 +1,6 @@
 package model
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -23,7 +22,6 @@ type Transaction struct {
 	Fees           string
 	ExecutedAt     string
 	PositionEffect string
-	ChainID        sql.NullString
 	CreatedAt      string
 }
 
@@ -40,7 +38,7 @@ func (r *FullTransaction) ScanDest() []any {
 		[]any{
 			&r.ID, &r.TradeID, &r.BrokerTxID, &r.Broker, &r.AccountID,
 			&r.InstrumentID, &r.Action, &r.Quantity, &r.FillPrice,
-			&r.Fees, &r.ExecutedAt, &r.PositionEffect, &r.ChainID, &r.CreatedAt,
+			&r.Fees, &r.ExecutedAt, &r.PositionEffect, &r.CreatedAt,
 		},
 		r.Inst.ScanDest()...,
 	)
@@ -83,17 +81,13 @@ func (r FullTransaction) ToDomain() (domain.Transaction, error) {
 		ExecutedAt:     executedAt,
 		PositionEffect: domain.PositionEffect(r.PositionEffect),
 	}
-	if r.ChainID.Valid {
-		chainID := r.ChainID.String
-		tx.ChainID = &chainID
-	}
 	return tx, nil
 }
 
 // TransactionToStorage converts a domain.Transaction to its flat storage struct,
 // recording the current time as created_at.
 func TransactionToStorage(tx domain.Transaction, now time.Time) Transaction {
-	s := Transaction{
+	return Transaction{
 		ID:             tx.ID,
 		TradeID:        tx.TradeID,
 		BrokerTxID:     tx.BrokerTxID,
@@ -108,8 +102,4 @@ func TransactionToStorage(tx domain.Transaction, now time.Time) Transaction {
 		PositionEffect: string(tx.PositionEffect),
 		CreatedAt:      now.UTC().Format(time.RFC3339),
 	}
-	if tx.ChainID != nil {
-		s.ChainID = sql.NullString{String: *tx.ChainID, Valid: true}
-	}
-	return s
 }

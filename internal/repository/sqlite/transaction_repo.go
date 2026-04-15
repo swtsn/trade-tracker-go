@@ -17,7 +17,7 @@ const transactionJoinSelect = `
 	SELECT
 		t.id, t.trade_id, t.broker_tx_id, t.broker, t.account_id, t.instrument_id,
 		t.action, t.quantity, t.fill_price, t.fees, t.executed_at, t.position_effect,
-		t.chain_id, t.created_at,
+		t.created_at,
 		i.id, i.symbol, i.asset_class, i.expiration, i.strike, i.option_type,
 		i.multiplier, i.osi_symbol, i.futures_expiry_month, i.exchange_code
 	FROM transactions t
@@ -40,10 +40,10 @@ func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) er
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO transactions
 			(id, trade_id, broker_tx_id, broker, account_id, instrument_id, action,
-			 quantity, fill_price, fees, executed_at, position_effect, chain_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 quantity, fill_price, fees, executed_at, position_effect, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.TradeID, s.BrokerTxID, s.Broker, s.AccountID, s.InstrumentID, s.Action,
-		s.Quantity, s.FillPrice, s.Fees, s.ExecutedAt, s.PositionEffect, s.ChainID, s.CreatedAt,
+		s.Quantity, s.FillPrice, s.Fees, s.ExecutedAt, s.PositionEffect, s.CreatedAt,
 	)
 	if err != nil {
 		if isUniqueConstraint(err) {

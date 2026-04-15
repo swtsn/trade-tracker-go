@@ -13,6 +13,7 @@ const (
 	LinkTypeRoll       LinkType = "roll"
 	LinkTypeAssignment LinkType = "assignment"
 	LinkTypeExercise   LinkType = "exercise"
+	LinkTypeClose      LinkType = "close" // records a close-only trade in the chain; the chain may or may not close after this event
 )
 
 // Chain represents the full lifecycle of a position — spans rolls, assignments,
@@ -22,7 +23,6 @@ type Chain struct {
 	AccountID        string
 	UnderlyingSymbol string
 	OriginalTradeID  string
-	OrderIDs         []string // broker order IDs of all orders that contributed to this chain. Support is broker-specific — may be empty if the broker does not expose order IDs.
 	CreatedAt        time.Time
 	ClosedAt         *time.Time
 	Links            []ChainLink
