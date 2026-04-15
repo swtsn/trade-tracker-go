@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,7 +31,6 @@ func TestTransactionRepository(t *testing.T) {
 		assert.Equal(t, tx.Instrument.Symbol, got.Instrument.Symbol)
 		assert.Equal(t, tx.Instrument.AssetClass, got.Instrument.AssetClass)
 		assert.Equal(t, tx.PositionEffect, got.PositionEffect)
-		assert.Nil(t, got.ChainID)
 	})
 
 	t.Run("get not found", func(t *testing.T) {
@@ -89,34 +86,4 @@ func TestTransactionRepository(t *testing.T) {
 		assert.Len(t, txs, 2)
 	})
 
-	t.Run("chain id round-trips", func(t *testing.T) {
-		r2 := openTestDB(t)
-		a := seedAccount(t, ctx, r2)
-		i := seedEquityInstrument(t, ctx, r2, "SPY")
-		tr := seedTrade(t, ctx, r2, a, domain.StrategyStock, time.Now())
-
-		// chain_id has no FK constraint on transactions, so we can store any string.
-		chainID := "chain-abc"
-		txWithChain := &domain.Transaction{
-			ID:             uuid.New().String(),
-			TradeID:        tr.ID,
-			BrokerTxID:     uuid.New().String(),
-			Broker:         a.Broker,
-			AccountID:      a.ID,
-			Instrument:     i,
-			Action:         domain.ActionBuy,
-			Quantity:       decimal.NewFromInt(1),
-			FillPrice:      decimal.NewFromInt(400),
-			Fees:           decimal.NewFromFloat(0.65),
-			ExecutedAt:     time.Now().UTC().Truncate(time.Second),
-			PositionEffect: domain.PositionEffectOpening,
-			ChainID:        &chainID,
-		}
-		require.NoError(t, r2.Transactions.Create(ctx, txWithChain))
-
-		got, err := r2.Transactions.GetByID(ctx, txWithChain.ID)
-		require.NoError(t, err)
-		require.NotNil(t, got.ChainID)
-		assert.Equal(t, chainID, *got.ChainID)
-	})
 }

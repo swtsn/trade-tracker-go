@@ -89,10 +89,28 @@ type ChainRepository interface {
 	CreateChain(ctx context.Context, chain *domain.Chain) error
 	// GetChainByID returns the chain with its Links slice populated.
 	GetChainByID(ctx context.Context, id string) (*domain.Chain, error)
+	// GetChainByTradeID returns the chain that owns the given trade, checking
+	// chains.original_trade_id, chain_links.closing_trade_id, and
+	// chain_links.opening_trade_id. Used as the idempotency gate in chain
+	// detection. Returns domain.ErrNotFound when no chain owns the trade.
+	GetChainByTradeID(ctx context.Context, tradeID string) (*domain.Chain, error)
 	// ListChainsByAccount returns chains with empty Links slices; use GetChainByID for full detail.
 	ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error)
 	UpdateChainClosed(ctx context.Context, id string, closedAt time.Time) error
 
+	// GetOpenChainForInstrument returns the open chain in the account that has a net
+	// positive opening balance for the given instrument (derived from transaction arithmetic).
+	// Used to attribute a closing transaction to its originating chain.
+	// Returns domain.ErrNotFound when no open chain holds the instrument.
+	GetOpenChainForInstrument(ctx context.Context, accountID, instrumentID string) (*domain.Chain, error)
+
+	// ChainIsOpen reports whether any instrument in the chain has a net opening
+	// quantity greater than zero across all of the chain's trades (transaction arithmetic).
+	ChainIsOpen(ctx context.Context, chainID string) (bool, error)
+
 	CreateChainLink(ctx context.Context, link *domain.ChainLink) error
 	ListChainLinks(ctx context.Context, chainID string) ([]domain.ChainLink, error)
+	// GetChainPnL returns the net realized P&L for the chain computed from transaction data:
+	// sum of (fill_price × quantity × multiplier × direction_sign − fees) across all trades.
+	GetChainPnL(ctx context.Context, chainID string) (decimal.Decimal, error)
 }

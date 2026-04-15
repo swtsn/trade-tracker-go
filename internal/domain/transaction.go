@@ -29,6 +29,20 @@ const (
 	PositionEffectClosing PositionEffect = "closing"
 )
 
+// CashFlowSign returns +1 for sell/credit actions (STO, STC, SELL) and -1 for
+// buy/debit actions (BTO, BTC, BUY). Returns 0 for neutral actions such as
+// ASSIGNMENT, EXPIRATION, and EXERCISE.
+func CashFlowSign(action Action) decimal.Decimal {
+	switch action {
+	case ActionSTO, ActionSTC, ActionSell:
+		return decimal.NewFromInt(1)
+	case ActionBTO, ActionBTC, ActionBuy:
+		return decimal.NewFromInt(-1)
+	default:
+		return decimal.Zero
+	}
+}
+
 // Transaction represents a single execution event within a trade.
 // It is the atomic unit of trading activity, recording quantity, price, and fees.
 type Transaction struct {
@@ -44,6 +58,5 @@ type Transaction struct {
 	FillPrice      decimal.Decimal
 	Fees           decimal.Decimal
 	ExecutedAt     time.Time
-	ChainID        *string
 	PositionEffect PositionEffect
 }
