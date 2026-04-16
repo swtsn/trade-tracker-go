@@ -6,24 +6,25 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Position is a materialized cache of current open state per (account, instrument).
-// Written in the same DB transaction as lot changes. Never written independently.
+// Position represents one open or closed position in an account.
+// A position always belongs to a chain; ChainID is set at creation time.
+// Written by PositionService.ProcessTrade; never written independently.
 type Position struct {
-	ID           string
-	AccountID    string
-	Instrument   Instrument
-	Quantity     decimal.Decimal // signed: negative = short; 0 = closed
-	CostBasis    decimal.Decimal
-	RealizedPnL  decimal.Decimal
-	OpenedAt     time.Time
-	UpdatedAt    time.Time
-	ClosedAt     *time.Time
-	ChainID      *string
-	StrategyType StrategyType  // classified from the position's own legs; independent of any trade
-	Lots         []PositionLot // open lots only
+	ID                 string
+	AccountID          string
+	ChainID            string
+	OriginatingTradeID string
+	UnderlyingSymbol   string
+	CostBasis          decimal.Decimal // positive = net credit received; negative = net debit paid
+	RealizedPnL        decimal.Decimal
+	OpenedAt           time.Time
+	UpdatedAt          time.Time
+	ClosedAt           *time.Time
+	StrategyType       StrategyType
+	Lots               []PositionLot // open lots only; not persisted — currently unpopulated, reserved for future use
 }
 
-// PositionLot is the source of truth. One row per opening transaction.
+// PositionLot is the source of truth for one opening transaction.
 // Quantity is signed (negative = short). FIFO matching on close.
 type PositionLot struct {
 	ID                string
@@ -31,13 +32,13 @@ type PositionLot struct {
 	Instrument        Instrument
 	TradeID           string
 	OpeningTxID       string
-	OpenQuantity      decimal.Decimal // signed
+	OpenQuantity      decimal.Decimal // signed: negative = short
 	RemainingQuantity decimal.Decimal // decremented on each close
 	OpenPrice         decimal.Decimal
 	OpenFees          decimal.Decimal
 	OpenedAt          time.Time
 	ClosedAt          *time.Time
-	ChainID           *string
+	ChainID           string
 }
 
 // LotClosing records one close event against a lot.

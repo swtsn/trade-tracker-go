@@ -14,13 +14,13 @@ import (
 )
 
 // ChainService runs chain detection over an account's trade history.
-// It operates purely on trade and transaction data — no dependency on position lots.
-// Chain detection must be run after transactions are imported; it can run before or
-// independently of the position service.
+// It stamps chain_id onto position lots and position rows via PositionRepository
+// after creating or extending a chain.
 type ChainService struct {
-	chains repository.ChainRepository
-	trades repository.TradeRepository
-	txns   repository.TransactionRepository
+	chains    repository.ChainRepository
+	trades    repository.TradeRepository
+	txns      repository.TransactionRepository
+	positions repository.PositionRepository
 }
 
 // NewChainService creates a ChainService with the given dependencies.
@@ -28,11 +28,13 @@ func NewChainService(
 	chains repository.ChainRepository,
 	trades repository.TradeRepository,
 	txns repository.TransactionRepository,
+	positions repository.PositionRepository,
 ) *ChainService {
 	return &ChainService{
-		chains: chains,
-		trades: trades,
-		txns:   txns,
+		chains:    chains,
+		trades:    trades,
+		txns:      txns,
+		positions: positions,
 	}
 }
 
@@ -65,11 +67,21 @@ func (s *ChainService) DetectChains(ctx context.Context, accountID string) error
 	})
 
 	for i := range trades {
-		if err := s.processTrade(ctx, &trades[i]); err != nil {
+		if _, err := s.processTrade(ctx, &trades[i]); err != nil {
 			return fmt.Errorf("detect chains: trade %s: %w", trades[i].ID, err)
 		}
 	}
 	return nil
+}
+
+// ProcessTrade runs chain detection for a single trade and returns the chain ID.
+// Called by ImportService as a core write step, before PositionService.
+func (s *ChainService) ProcessTrade(ctx context.Context, tradeID string) (string, error) {
+	trade, err := s.trades.GetByID(ctx, tradeID)
+	if err != nil {
+		return "", fmt.Errorf("chain service process trade %s: %w", tradeID, err)
+	}
+	return s.processTrade(ctx, trade)
 }
 
 // GetChain returns a chain with its Links populated.
@@ -87,20 +99,21 @@ func (s *ChainService) GetChainPnL(ctx context.Context, chainID string) (decimal
 	return s.chains.GetChainPnL(ctx, chainID)
 }
 
-// processTrade classifies one trade and applies the appropriate chain action.
-func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) error {
-	// Idempotency: if this trade is already assigned to a chain, skip.
+// processTrade classifies one trade, applies the appropriate chain action, and returns the chain ID.
+// Returns an empty string for neutral-only or unattributable trades.
+func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (string, error) {
+	// Idempotency: if this trade is already assigned to a chain, return its ID.
 	existing, err := s.chains.GetChainByTradeID(ctx, trade.ID)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
-		return fmt.Errorf("idempotency check: %w", err)
+		return "", fmt.Errorf("idempotency check: %w", err)
 	}
 	if existing != nil {
-		return nil
+		return existing.ID, nil
 	}
 
 	txns, err := s.txns.ListByTrade(ctx, trade.ID)
 	if err != nil {
-		return fmt.Errorf("list transactions: %w", err)
+		return "", fmt.Errorf("list transactions: %w", err)
 	}
 
 	var hasOpening, hasClosing bool
@@ -115,7 +128,7 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) er
 
 	if !hasClosing {
 		if !hasOpening {
-			return nil // neutral-only trade (e.g. dividend); nothing to chain
+			return "", nil // neutral-only trade (e.g. dividend); nothing to chain
 		}
 		return s.startChain(ctx, trade, txns)
 	}
@@ -123,9 +136,9 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) er
 	chainID, err := s.attributeChain(ctx, txns)
 	if err != nil {
 		if errors.Is(err, domain.ErrUnattributableTrade) {
-			return nil // skip; open trade not yet processed (e.g. out-of-order import)
+			return "", nil // skip; open trade not yet processed (e.g. out-of-order import)
 		}
-		return err
+		return "", err
 	}
 
 	if hasOpening {
@@ -134,11 +147,11 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) er
 	return s.maybeCloseChain(ctx, trade, txns, chainID)
 }
 
-// startChain creates a new Chain for an opening-only trade.
-func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) error {
+// startChain creates a new Chain for an opening-only trade and returns the new chain ID.
+func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) (string, error) {
 	chainID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate chain id: %w", err)
+		return "", fmt.Errorf("generate chain id: %w", err)
 	}
 	chain := &domain.Chain{
 		ID:               chainID.String(),
@@ -148,20 +161,20 @@ func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns
 		CreatedAt:        trade.OpenedAt,
 	}
 	if err := s.chains.CreateChain(ctx, chain); err != nil {
-		return fmt.Errorf("start chain: %w", err)
+		return "", fmt.Errorf("start chain: %w", err)
 	}
-	return nil
+	return chain.ID, nil
 }
 
-// extendChain records a roll or adjustment link for a mixed trade.
-func (s *ChainService) extendChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
+// extendChain records a roll or adjustment link for a mixed trade and returns the chain ID.
+func (s *ChainService) extendChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) (string, error) {
 	existingLinks, err := s.chains.ListChainLinks(ctx, chainID)
 	if err != nil {
-		return fmt.Errorf("list chain links: %w", err)
+		return "", fmt.Errorf("list chain links: %w", err)
 	}
 	linkID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate link id: %w", err)
+		return "", fmt.Errorf("generate link id: %w", err)
 	}
 	strikeChange, expirationChange := computeStrikeExpChange(txns)
 	link := &domain.ChainLink{
@@ -177,22 +190,22 @@ func (s *ChainService) extendChain(ctx context.Context, trade *domain.Trade, txn
 		CreditDebit:      computeCreditDebit(txns),
 	}
 	if err := s.chains.CreateChainLink(ctx, link); err != nil {
-		return fmt.Errorf("extend chain: %w", err)
+		return "", fmt.Errorf("extend chain: %w", err)
 	}
-	return nil
+	return chainID, nil
 }
 
-// maybeCloseChain records a terminal close link for a close-only trade, then marks
-// the chain closed if no open balance remains.
-func (s *ChainService) maybeCloseChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
+// maybeCloseChain records a terminal close link for a close-only trade, marks the
+// chain closed if no open balance remains, and returns the chain ID.
+func (s *ChainService) maybeCloseChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) (string, error) {
 	// Record the closing trade in the chain so ChainIsOpen includes its transactions.
 	existingLinks, err := s.chains.ListChainLinks(ctx, chainID)
 	if err != nil {
-		return fmt.Errorf("list chain links: %w", err)
+		return "", fmt.Errorf("list chain links: %w", err)
 	}
 	linkID, err := uuid.NewV7()
 	if err != nil {
-		return fmt.Errorf("generate link id: %w", err)
+		return "", fmt.Errorf("generate link id: %w", err)
 	}
 	link := &domain.ChainLink{
 		ID:             linkID.String(),
@@ -205,20 +218,20 @@ func (s *ChainService) maybeCloseChain(ctx context.Context, trade *domain.Trade,
 		CreditDebit:    computeCreditDebit(txns),
 	}
 	if err := s.chains.CreateChainLink(ctx, link); err != nil {
-		return fmt.Errorf("record close link: %w", err)
+		return "", fmt.Errorf("record close link: %w", err)
 	}
 
 	hasOpen, err := s.chains.ChainIsOpen(ctx, chainID)
 	if err != nil {
-		return fmt.Errorf("check open balance: %w", err)
+		return "", fmt.Errorf("check open balance: %w", err)
 	}
 	if hasOpen {
-		return nil
+		return chainID, nil
 	}
 	if err := s.chains.UpdateChainClosed(ctx, chainID, trade.OpenedAt); err != nil {
-		return fmt.Errorf("mark chain closed: %w", err)
+		return "", fmt.Errorf("mark chain closed: %w", err)
 	}
-	return nil
+	return chainID, nil
 }
 
 // attributeChain finds the open chain in the account that holds the instrument from

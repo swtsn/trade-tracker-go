@@ -9,44 +9,35 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
-// Position is a joined row: positions + instruments.
+// Position holds the flat, SQL-scannable fields for a positions row (migration 009 schema).
+// No instrument join — positions span multiple instruments.
 type Position struct {
-	ID           string
-	AccountID    string
-	InstrumentID string
-	Quantity     string
-	CostBasis    string
-	RealizedPnL  string
-	OpenedAt     string
-	UpdatedAt    string
-	ClosedAt     sql.NullString
-	ChainID      sql.NullString
-	StrategyType string
-	Inst         Instrument
+	ID                 string
+	AccountID          string
+	ChainID            sql.NullString
+	OriginatingTradeID string
+	UnderlyingSymbol   string
+	StrategyType       string
+	CostBasis          string
+	RealizedPnL        string
+	OpenedAt           string
+	UpdatedAt          string
+	ClosedAt           sql.NullString
 }
 
-// ScanDest returns the pointers to scan destinations matching the SELECT column order.
+// ScanDest returns pointers matching the SELECT column order:
+// id, account_id, chain_id, originating_trade_id, underlying_symbol,
+// strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at
 func (r *Position) ScanDest() []any {
-	return append(
-		[]any{
-			&r.ID, &r.AccountID, &r.InstrumentID,
-			&r.Quantity, &r.CostBasis, &r.RealizedPnL,
-			&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt, &r.ChainID, &r.StrategyType,
-		},
-		r.Inst.ScanDest()...,
-	)
+	return []any{
+		&r.ID, &r.AccountID, &r.ChainID, &r.OriginatingTradeID, &r.UnderlyingSymbol,
+		&r.StrategyType, &r.CostBasis, &r.RealizedPnL,
+		&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt,
+	}
 }
 
 // ToDomain converts to a domain.Position.
 func (r Position) ToDomain() (domain.Position, error) {
-	inst, err := r.Inst.ToDomain()
-	if err != nil {
-		return domain.Position{}, fmt.Errorf("position instrument: %w", err)
-	}
-	qty, err := decimal.NewFromString(r.Quantity)
-	if err != nil {
-		return domain.Position{}, fmt.Errorf("position quantity: %w", err)
-	}
 	costBasis, err := decimal.NewFromString(r.CostBasis)
 	if err != nil {
 		return domain.Position{}, fmt.Errorf("position cost_basis: %w", err)
@@ -65,15 +56,16 @@ func (r Position) ToDomain() (domain.Position, error) {
 	}
 
 	p := domain.Position{
-		ID:           r.ID,
-		AccountID:    r.AccountID,
-		Instrument:   inst,
-		Quantity:     qty,
-		CostBasis:    costBasis,
-		RealizedPnL:  realizedPnL,
-		OpenedAt:     openedAt,
-		UpdatedAt:    updatedAt,
-		StrategyType: domain.StrategyType(r.StrategyType),
+		ID:                 r.ID,
+		AccountID:          r.AccountID,
+		ChainID:            r.ChainID.String, // empty string for legacy rows with NULL chain_id
+		OriginatingTradeID: r.OriginatingTradeID,
+		UnderlyingSymbol:   r.UnderlyingSymbol,
+		StrategyType:       domain.StrategyType(r.StrategyType),
+		CostBasis:          costBasis,
+		RealizedPnL:        realizedPnL,
+		OpenedAt:           openedAt,
+		UpdatedAt:          updatedAt,
 	}
 	if r.ClosedAt.Valid {
 		t, err := time.Parse(time.RFC3339, r.ClosedAt.String)
@@ -81,10 +73,6 @@ func (r Position) ToDomain() (domain.Position, error) {
 			return domain.Position{}, fmt.Errorf("position closed_at: %w", err)
 		}
 		p.ClosedAt = &t
-	}
-	if r.ChainID.Valid {
-		chainID := r.ChainID.String
-		p.ChainID = &chainID
 	}
 	return p, nil
 }
@@ -96,21 +84,19 @@ func PositionToStorage(pos domain.Position) Position {
 		strategyType = string(domain.StrategyUnknown)
 	}
 	s := Position{
-		ID:           pos.ID,
-		AccountID:    pos.AccountID,
-		InstrumentID: pos.Instrument.InstrumentID(),
-		Quantity:     pos.Quantity.String(),
-		CostBasis:    pos.CostBasis.String(),
-		RealizedPnL:  pos.RealizedPnL.String(),
-		OpenedAt:     pos.OpenedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    pos.UpdatedAt.UTC().Format(time.RFC3339),
-		StrategyType: strategyType,
+		ID:                 pos.ID,
+		AccountID:          pos.AccountID,
+		ChainID:            sql.NullString{String: pos.ChainID, Valid: pos.ChainID != ""},
+		OriginatingTradeID: pos.OriginatingTradeID,
+		UnderlyingSymbol:   pos.UnderlyingSymbol,
+		StrategyType:       strategyType,
+		CostBasis:          pos.CostBasis.String(),
+		RealizedPnL:        pos.RealizedPnL.String(),
+		OpenedAt:           pos.OpenedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:          pos.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if pos.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: pos.ClosedAt.UTC().Format(time.RFC3339), Valid: true}
-	}
-	if pos.ChainID != nil {
-		s.ChainID = sql.NullString{String: *pos.ChainID, Valid: true}
 	}
 	return s
 }
@@ -182,6 +168,7 @@ func (r PositionLot) ToDomain() (domain.PositionLot, error) {
 		OpenPrice:         openPrice,
 		OpenFees:          openFees,
 		OpenedAt:          openedAt,
+		ChainID:           r.ChainID.String, // empty string for legacy rows with NULL chain_id
 	}
 	if r.ClosedAt.Valid {
 		t, err := time.Parse(time.RFC3339, r.ClosedAt.String)
@@ -189,10 +176,6 @@ func (r PositionLot) ToDomain() (domain.PositionLot, error) {
 			return domain.PositionLot{}, fmt.Errorf("lot closed_at: %w", err)
 		}
 		lot.ClosedAt = &t
-	}
-	if r.ChainID.Valid {
-		chainID := r.ChainID.String
-		lot.ChainID = &chainID
 	}
 	return lot, nil
 }
@@ -210,12 +193,10 @@ func LotToStorage(lot domain.PositionLot) PositionLot {
 		OpenPrice:         lot.OpenPrice.String(),
 		OpenFees:          lot.OpenFees.String(),
 		OpenedAt:          lot.OpenedAt.UTC().Format(time.RFC3339),
+		ChainID:           sql.NullString{String: lot.ChainID, Valid: lot.ChainID != ""},
 	}
 	if lot.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: lot.ClosedAt.UTC().Format(time.RFC3339), Valid: true}
-	}
-	if lot.ChainID != nil {
-		s.ChainID = sql.NullString{String: *lot.ChainID, Valid: true}
 	}
 	return s
 }

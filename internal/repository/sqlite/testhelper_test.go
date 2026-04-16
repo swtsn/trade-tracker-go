@@ -82,6 +82,20 @@ func seedTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *doma
 	return trade
 }
 
+// seedChain creates a chain anchored to the given trade.
+func seedChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, anchorTrade *domain.Trade) *domain.Chain {
+	t.Helper()
+	chain := &domain.Chain{
+		ID:               uuid.New().String(),
+		AccountID:        acc.ID,
+		UnderlyingSymbol: "TEST",
+		OriginalTradeID:  anchorTrade.ID,
+		CreatedAt:        anchorTrade.OpenedAt,
+	}
+	require.NoError(t, repos.Chains.CreateChain(ctx, chain))
+	return chain
+}
+
 // seedTransaction creates a transaction for a trade.
 func seedTransaction(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, trade *domain.Trade, inst domain.Instrument, action domain.Action, qty, price float64, effect domain.PositionEffect, executedAt time.Time) *domain.Transaction {
 	t.Helper()

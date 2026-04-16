@@ -42,3 +42,8 @@ func OpenRepos(path string) (*Repos, error) {
 func (r *Repos) Close() error {
 	return r.db.Close()
 }
+
+// DB returns the underlying sql.DB. Intended for test helpers that need raw queries.
+func (r *Repos) DB() *sql.DB {
+	return r.db
+}
