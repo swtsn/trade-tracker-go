@@ -80,6 +80,40 @@ func TestPositionRepository(t *testing.T) {
 		assert.Equal(t, lotIDs[2], lots[2].ID)
 	})
 
+	t.Run("list open lots by trade", func(t *testing.T) {
+		repos := openTestDB(t)
+		acc := seedAccount(t, ctx, repos)
+		inst := seedEquityInstrument(t, ctx, repos, "NVDA")
+		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+
+		tx1 := seedTransaction(t, ctx, repos, acc, trade1, inst, domain.ActionBuy, 5, 900, domain.PositionEffectOpening, time.Now())
+		tx2 := seedTransaction(t, ctx, repos, acc, trade2, inst, domain.ActionBuy, 3, 920, domain.PositionEffectOpening, time.Now())
+
+		lot1 := &domain.PositionLot{
+			ID: uuid.New().String(), AccountID: acc.ID, Instrument: inst,
+			TradeID: trade1.ID, OpeningTxID: tx1.ID,
+			OpenQuantity: decimal.NewFromInt(5), RemainingQuantity: decimal.NewFromInt(5),
+			OpenPrice: decimal.NewFromFloat(900), OpenFees: decimal.NewFromFloat(0.65),
+			OpenedAt: tx1.ExecutedAt,
+		}
+		lot2 := &domain.PositionLot{
+			ID: uuid.New().String(), AccountID: acc.ID, Instrument: inst,
+			TradeID: trade2.ID, OpeningTxID: tx2.ID,
+			OpenQuantity: decimal.NewFromInt(3), RemainingQuantity: decimal.NewFromInt(3),
+			OpenPrice: decimal.NewFromFloat(920), OpenFees: decimal.NewFromFloat(0.65),
+			OpenedAt: tx2.ExecutedAt,
+		}
+		require.NoError(t, repos.Positions.CreateLot(ctx, lot1))
+		require.NoError(t, repos.Positions.CreateLot(ctx, lot2))
+
+		// Only trade1's lot should be returned.
+		lots, err := repos.Positions.ListOpenLotsByTrade(ctx, acc.ID, trade1.ID)
+		require.NoError(t, err)
+		require.Len(t, lots, 1)
+		assert.Equal(t, lot1.ID, lots[0].ID)
+	})
+
 	t.Run("close lot - partial then full", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
@@ -151,57 +185,99 @@ func TestPositionRepository(t *testing.T) {
 		assert.Empty(t, open)
 	})
 
-	t.Run("upsert position and get", func(t *testing.T) {
+	t.Run("create and get position by trade id", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		inst := seedEquityInstrument(t, ctx, repos, "TSLA")
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
 
 		pos := &domain.Position{
-			ID:          uuid.New().String(),
-			AccountID:   acc.ID,
-			Instrument:  inst,
-			Quantity:    decimal.NewFromInt(5),
-			CostBasis:   decimal.NewFromFloat(1000),
-			RealizedPnL: decimal.NewFromInt(0),
-			OpenedAt:    time.Now().UTC().Truncate(time.Second),
-			UpdatedAt:   time.Now().UTC().Truncate(time.Second),
+			ID:                 uuid.New().String(),
+			AccountID:          acc.ID,
+			OriginatingTradeID: trade.ID,
+			UnderlyingSymbol:   "SPY",
+			CostBasis:          decimal.NewFromFloat(340),
+			RealizedPnL:        decimal.Zero,
+			OpenedAt:           time.Now().UTC().Truncate(time.Second),
+			UpdatedAt:          time.Now().UTC().Truncate(time.Second),
+			StrategyType:       domain.StrategySingle,
 		}
-		require.NoError(t, repos.Positions.UpsertPosition(ctx, pos))
+		require.NoError(t, repos.Positions.CreatePosition(ctx, pos))
 
-		got, err := repos.Positions.GetPosition(ctx, acc.ID, inst.InstrumentID())
+		got, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, trade.ID)
 		require.NoError(t, err)
 		assert.Equal(t, pos.ID, got.ID)
-		assert.True(t, decimal.NewFromInt(5).Equal(got.Quantity))
-		assert.Equal(t, "TSLA", got.Instrument.Symbol)
+		assert.Equal(t, "SPY", got.UnderlyingSymbol)
+		assert.Equal(t, trade.ID, got.OriginatingTradeID)
+		assert.True(t, decimal.NewFromFloat(340).Equal(got.CostBasis))
+		assert.Nil(t, got.ClosedAt)
+		assert.Empty(t, got.ChainID)
 
-		// Update via second upsert.
-		pos.Quantity = decimal.NewFromInt(10)
-		pos.CostBasis = decimal.NewFromFloat(2000)
+		// Update via UpdatePosition.
+		pos.CostBasis = decimal.NewFromFloat(500)
+		pos.RealizedPnL = decimal.NewFromFloat(80)
 		pos.UpdatedAt = time.Now().UTC().Truncate(time.Second).Add(time.Minute)
-		require.NoError(t, repos.Positions.UpsertPosition(ctx, pos))
+		require.NoError(t, repos.Positions.UpdatePosition(ctx, pos))
 
-		got2, err := repos.Positions.GetPosition(ctx, acc.ID, inst.InstrumentID())
+		got2, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, trade.ID)
 		require.NoError(t, err)
-		assert.True(t, decimal.NewFromInt(10).Equal(got2.Quantity))
+		assert.True(t, decimal.NewFromFloat(500).Equal(got2.CostBasis))
+		assert.True(t, decimal.NewFromFloat(80).Equal(got2.RealizedPnL))
 	})
 
 	t.Run("list open positions", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		i1 := seedEquityInstrument(t, ctx, repos, "AAPL")
-		i2 := seedEquityInstrument(t, ctx, repos, "GOOG")
+		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
 
 		now := time.Now().UTC().Truncate(time.Second)
 		closedAt := now.Add(time.Hour)
-		p1 := &domain.Position{ID: uuid.New().String(), AccountID: acc.ID, Instrument: i1, Quantity: decimal.NewFromInt(10), CostBasis: decimal.Zero, RealizedPnL: decimal.Zero, OpenedAt: now, UpdatedAt: now}
-		p2 := &domain.Position{ID: uuid.New().String(), AccountID: acc.ID, Instrument: i2, Quantity: decimal.NewFromInt(0), CostBasis: decimal.Zero, RealizedPnL: decimal.Zero, OpenedAt: now, UpdatedAt: now, ClosedAt: &closedAt}
-		require.NoError(t, repos.Positions.UpsertPosition(ctx, p1))
-		require.NoError(t, repos.Positions.UpsertPosition(ctx, p2))
+
+		p1 := &domain.Position{
+			ID: uuid.New().String(), AccountID: acc.ID,
+			OriginatingTradeID: trade1.ID, UnderlyingSymbol: "AAPL",
+			CostBasis: decimal.Zero, RealizedPnL: decimal.Zero,
+			OpenedAt: now, UpdatedAt: now,
+		}
+		p2 := &domain.Position{
+			ID: uuid.New().String(), AccountID: acc.ID,
+			OriginatingTradeID: trade2.ID, UnderlyingSymbol: "GOOG",
+			CostBasis: decimal.Zero, RealizedPnL: decimal.Zero,
+			OpenedAt: now, UpdatedAt: now, ClosedAt: &closedAt,
+		}
+		require.NoError(t, repos.Positions.CreatePosition(ctx, p1))
+		require.NoError(t, repos.Positions.CreatePosition(ctx, p2))
 
 		open, err := repos.Positions.ListOpenPositions(ctx, acc.ID)
 		require.NoError(t, err)
 		assert.Len(t, open, 1)
-		assert.Equal(t, "AAPL", open[0].Instrument.Symbol)
+		assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)
+	})
+
+	t.Run("get position by chain id", func(t *testing.T) {
+		repos := openTestDB(t)
+		acc := seedAccount(t, ctx, repos)
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		chain := seedChain(t, ctx, repos, acc, trade)
+
+		chainID := chain.ID
+		pos := &domain.Position{
+			ID:                 uuid.New().String(),
+			AccountID:          acc.ID,
+			ChainID:            chainID,
+			OriginatingTradeID: trade.ID,
+			UnderlyingSymbol:   "SPY",
+			CostBasis:          decimal.NewFromFloat(340),
+			RealizedPnL:        decimal.Zero,
+			OpenedAt:           time.Now().UTC().Truncate(time.Second),
+			UpdatedAt:          time.Now().UTC().Truncate(time.Second),
+		}
+		require.NoError(t, repos.Positions.CreatePosition(ctx, pos))
+
+		got, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+		require.NoError(t, err)
+		assert.Equal(t, pos.ID, got.ID)
+		assert.Equal(t, chainID, got.ChainID)
 	})
 
 	t.Run("lot closing round-trip with resulting_lot_id", func(t *testing.T) {
@@ -251,7 +327,7 @@ func TestPositionRepository(t *testing.T) {
 			ClosedQuantity: decimal.NewFromInt(1),
 			ClosePrice:     decimal.NewFromFloat(500),
 			CloseFees:      decimal.NewFromFloat(0),
-			RealizedPnL:    decimal.NewFromFloat(350), // (3.50 * 100) - fees
+			RealizedPnL:    decimal.NewFromFloat(350),
 			ClosedAt:       closeTx.ExecutedAt,
 			ResultingLotID: &stockLotID,
 		}

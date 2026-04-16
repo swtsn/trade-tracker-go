@@ -23,7 +23,7 @@ transactions, match lots, compute P&L, and classify strategies.
 | Schwab parser | ✅ done |
 | Import service | ✅ done |
 | Contract spec table | ✅ done |
-| Position service | 🔲 upcoming |
+| Position service | ✅ done |
 | Chain service | ✅ done |
 | Analytics service | 🔲 upcoming |
 
@@ -272,54 +272,226 @@ Key service test scenarios covered:
 
 ## Chain Service (`internal/service/chain_service.go`)
 
-Post-import pass that detects chains from the transaction log. Must be called after the
-position service has processed lots.
+Detects chains from the transaction log and back-fills `chain_id` onto lots and positions.
+Reads from `trades`, `transactions`, `chains`, and `chain_links`. Writes `chain_id` onto
+`position_lots` and `positions` via `PositionRepository`.
+
+Two entry points:
+- `ProcessTrade(ctx, tradeID)` — single-trade variant called in the import hook, immediately
+  after `PositionService.ProcessTrade`. No orphan state: chain_id is stamped in the same
+  import pass that creates the lots and position row.
+- `DetectChains(ctx, accountID)` — full account scan for replaying chain detection over
+  historical data. Must be run after position service has processed all trades.
 
 ### Chain lifecycle
 
 - **Starts:** opening-only trade (all legs `PositionEffectOpening`) with no prior chain context.
 - **Continues:** mixed trade (at least one closing + at least one opening leg) — a roll or adjustment.
-- **Ends:** close-only trade AND no open lots remain in the chain (includes expiration).
+- **Ends:** close-only trade AND no open balance remains in the chain.
 
 ### Attribution heuristic
 
-Closing leg's instrument → open lots for that instrument → those lots' `chain_id`. Same option
-contract in same account is always the same position, so attribution is unambiguous.
+`GetOpenChainForInstrument(accountID, instrumentID)` finds the open chain holding the
+closing leg's instrument via transaction arithmetic: sums `quantity × direction_sign` across
+all transactions linked to each chain and returns the chain with a net positive opening
+balance for the instrument. No lot data is read.
 
 ### `DetectChains(ctx, accountID)`
 
 Processes all trades chronologically. Per trade:
 
-1. **Opening-only** → create `Chain`, stamp `chain_id` on opened lots.
-2. **Mixed** → resolve `chain_id` from closed lots → stamp same `chain_id` on new opening lots →
+1. **Opening-only** → create `Chain` with `UnderlyingSymbol` from the first opening leg.
+2. **Mixed** → resolve `chain_id` from closing legs via `GetOpenChainForInstrument` →
    create `ChainLink` (LinkType: roll/assignment/exercise).
-3. **Close-only** → resolve `chain_id` from closed lots → if no open lots remain, mark chain closed.
+3. **Close-only** → resolve `chain_id` from closing legs → record close `ChainLink` →
+   call `ChainIsOpen`; if no open balance remains, stamp `chains.closed_at`.
 
-Idempotent: trades whose opening lots already carry a `chain_id` are skipped.
+Idempotent: `GetChainByTradeID` checks whether the trade already appears in
+`chains.original_trade_id` or any `chain_links` row. Trades already assigned are skipped.
 
-### `chain_id` placement
+### Open/closed state
 
-Stored on `position_lots` only. Chain history is fully reconstructable from lots:
-- `position_lots.opening_tx_id → transactions.trade_id` → opening trades
-- `lot_closings.closing_tx_id → transactions.trade_id` → closing trades
+`ChainIsOpen` and `GetOpenChainForInstrument` both use **transaction arithmetic** —
+summing `fill_price × quantity × direction_sign` across all transactions belonging to the
+chain's trades. `position_lots.remaining_quantity` is not consulted.
+
+### `chain_id` on `position_lots` and `positions`
+
+The chain service writes `chain_id` onto both `position_lots` and `positions` via two
+`PositionRepository` methods (`SetLotChainID`, `SetPositionChainID`) called during
+`startChain` and `extendChain`. This requires `ChainService` to take a `PositionRepository`
+dependency.
+
+`position_lots.chain_id` — set on all lots opened by the chain's original trade, and on
+any new lots opened by rolls/extensions. Used as the lot-level grouping key for portfolio
+queries and lot-level P&L attribution.
+
+`positions.chain_id` — set on the position row when a chain is assigned. Before chain
+detection runs, positions are grouped by `originating_trade_id`; afterwards by `chain_id`.
 
 The `chain_id` column on `transactions` was dropped in migration 008.
 
-### Repository additions
+### `GetChainPnL`
 
-`PositionRepository`:
-- `ListLotsByOpeningTxIDs` — batch lookup by opening_tx_id (idempotency gate)
-- `ListLotClosingsByClosingTxIDs` — batch lookup for resolving chain_id from closings
-- `ListOpenLotsByChain` — check whether any open lots remain in a chain
-- `UpdateLotChainID` — stamp chain_id onto a lot
+Computes net realized P&L from transaction data: `SUM(fill_price × quantity × multiplier ×
+direction_sign − fees)` across all transactions in the chain's trades (original + all link
+trades). Uses a `UNION` (not `UNION ALL`) to deduplicate trade IDs, since a roll stores the
+same trade in both `opening_trade_id` and `closing_trade_id` of its link.
 
-`ChainRepository`:
-- `GetChainPnL` — `SUM(lot_closings.realized_pnl)` for all lots with this chain_id; summed in Go
+## Position Service — Next
 
-## Position Service — Upcoming
+### Lifecycle
 
-The position service (lot tracking, FIFO matching, P&L) will be designed and implemented
-as the next step in phase 2. No design is recorded here yet.
+A position has two states: **open** (at least one lot with `remaining_quantity != 0`) and
+**closed** (all lots fully closed). There is no partially-closed state at the position level;
+partial closes are a lot-level concern recorded in `lot_closings`.
+
+### Identity
+
+A position is **one row per chain, or one row per originating trade if unchained.**
+
+- Chained: `positions.chain_id` is set; the position spans all trades in that chain.
+- Unchained: `positions.chain_id` is NULL; the position is keyed on `originating_trade_id`.
+  When `DetectChains` later assigns a chain to that trade, the position row is updated to
+  set `chain_id`. Partial-uniqueness (`chain_id` when set; `originating_trade_id` when not)
+  is enforced in the service layer, not by a DB constraint.
+
+### `positions` table — migration 009
+
+The current schema has `UNIQUE(account_id, instrument_id)` — one row per instrument. That
+changes in migration 009:
+
+**Columns removed:**
+- `instrument_id` — belongs on `position_lots` only; a position spans multiple instruments
+- `quantity` — ambiguous for multi-leg positions; per-leg quantities live on `position_lots`
+- `UNIQUE(account_id, instrument_id)` constraint
+
+**Columns added:**
+- `underlying_symbol TEXT NOT NULL` — drives the symbol-level portfolio grouping
+- `originating_trade_id TEXT NOT NULL REFERENCES trades(id)` — the trade that opened this
+  position; the grouping key when unchained
+
+**Columns unchanged:** `id`, `account_id`, `chain_id`, `cost_basis`, `realized_pnl`,
+`opened_at`, `updated_at`, `closed_at`, `strategy_type`
+
+`cost_basis` is the net debit or credit to establish the position: sum of
+`open_price × |open_quantity| × multiplier × direction_sign + open_fees` across all opening
+lots. Positive = net credit received; negative = net debit paid.
+
+**New indexes:**
+- `(account_id, underlying_symbol)` — symbol-level portfolio query
+- `(account_id, chain_id)` — chain lookup
+- `(account_id, originating_trade_id)` — unchained position lookup
+
+Since nothing currently writes `positions`, migration 009 has no data to preserve.
+
+### Portfolio view
+
+Three query levels:
+
+**Symbol summary** — one row per underlying symbol, all open positions:
+```
+underlying_symbol | open_positions | realized_pnl
+SPY               | 2              | 340.00
+AAPL              | 1              | 0.00
+```
+
+**Position list for a symbol** — one row per chain or trade under that symbol:
+```
+strategy    | cost_basis | realized_pnl | opened_at
+Vertical    | -120.00    | 0.00         | 2025-01-10
+ShortPut    |  340.00    | 0.00         | 2025-01-15
+```
+
+**Legs for a position** — open `position_lots` rows under the position:
+```
+instrument         | quantity | open_price | opened_at
+SPY 450P Jan 2025  | -1       | 3.40       | 2025-01-15
+SPY 445P Jan 2025  | +1       | 1.20       | 2025-01-15
+```
+
+### Import hook ordering
+
+The position service and chain service are both called as post-import hooks per trade,
+in sequence:
+
+```
+ImportService.Import()
+  └─ per trade group:
+       1. persist Trade + Transactions
+       2. PositionService.ProcessTrade(ctx, tradeID, txns)  ← lots + position row
+       3. ChainService.ProcessTrade(ctx, tradeID, txns)     ← chain + back-fill chain_id
+```
+
+`ChainService.ProcessTrade` is a single-trade variant of `DetectChains`. It processes one
+trade in isolation: creates or extends a chain, then immediately back-fills `chain_id` onto
+the lots and position row just written by the position service. No orphan state.
+
+`DetectChains(ctx, accountID)` (the full account scan) is retained for replaying chain
+detection over historical data.
+
+### Responsibilities
+
+`PositionService.ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction) error`
+
+The import service passes the already-persisted trade ID and its transactions. The position
+service processes each leg in the order the import service delivers them (closing legs first,
+then opening legs — the import service already guarantees this ordering).
+
+**On opening transaction (BTO, STO, BUY):**
+1. Create `PositionLot`:
+   - `open_quantity = remaining_quantity = signed quantity` (negative for short)
+   - `open_price = fill_price`, `open_fees = fees`, `opened_at = executed_at`
+2. Upsert `Position`: look up by `originating_trade_id = tradeID` (chain_id is NULL at
+   this point). If none exists, insert with `underlying_symbol` derived from the
+   instrument, `cost_basis` from this leg, `opened_at = executed_at`. If one exists,
+   add this leg's contribution to `cost_basis` and update `updated_at`.
+
+`cost_basis` per leg = `CashFlowSign(action) × fill_price × |quantity| × multiplier − fees`
+
+**On closing transaction (BTC, STC, SELL, EXPIRATION):**
+1. FIFO: load open lots for `(account_id, instrument_id)` ordered by `opened_at ASC`
+2. Walk lots oldest-first, consuming `remaining_quantity` until the closing quantity is satisfied
+3. Per lot consumed: compute `realized_pnl` and write a `LotClosing`; decrement
+   `remaining_quantity`; if it reaches zero, stamp `lot.closed_at`
+4. Locate the position via the lot's `chain_id` (if set) or `trade_id`, then accumulate
+   `realized_pnl` on the position. If all lots under the position are now closed, stamp
+   `position.closed_at`.
+
+**Realized P&L per lot closing:**
+```
+close_cf   = CashFlowSign(close_action) × close_price × closed_qty × multiplier
+open_cf    = CashFlowSign(open_action)  × open_price  × closed_qty × multiplier
+open_fees_prorated = lot.open_fees × (closed_qty / |lot.open_quantity|)
+
+realized_pnl = close_cf + open_cf − close_fees − open_fees_prorated
+```
+Opening fees are pro-rated by the fraction of the lot being closed. Closing fees are
+charged in full to the closing event.
+
+**On assignment / exercise:**
+- Option lot closed as above
+- New equity or futures lot opened; linked via `LotClosing.ResultingLotID`
+- New lot inherits `chain_id` from the closing lot (if set)
+
+**Expiration** is a close at `close_price = 0`. No special handling beyond action type.
+
+### Chain service — single-trade variant
+
+`ChainService.ProcessTrade(ctx, tradeID)` mirrors the per-trade logic inside `DetectChains`:
+classifies the trade (opening/mixed/close-only), applies the appropriate chain action, then
+back-fills `chain_id` via:
+
+```go
+// SetLotChainID stamps chain_id on all lots whose opening_tx_id is in openingTxIDs.
+SetLotChainID(ctx context.Context, openingTxIDs []string, chainID string) error
+
+// SetPositionChainID sets chain_id on the position whose originating_trade_id matches.
+SetPositionChainID(ctx context.Context, originatingTradeID, chainID string) error
+```
+
+Both methods are added to `PositionRepository`. `ChainService` gains a `PositionRepository`
+dependency.
 
 ---
 

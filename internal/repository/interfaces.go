@@ -63,16 +63,35 @@ type TradeRepository interface {
 
 // PositionRepository provides access to position and lot data.
 type PositionRepository interface {
-	UpsertPosition(ctx context.Context, position *domain.Position) error
-	GetPosition(ctx context.Context, accountID, instrumentID string) (*domain.Position, error)
+	// CreatePosition inserts a new position row.
+	CreatePosition(ctx context.Context, position *domain.Position) error
+	// UpdatePosition updates mutable fields: cost_basis, realized_pnl, strategy_type, updated_at, closed_at.
+	UpdatePosition(ctx context.Context, position *domain.Position) error
+	// GetPositionByTradeID finds a position by its originating_trade_id.
+	// Returns domain.ErrNotFound if no position exists.
+	GetPositionByTradeID(ctx context.Context, accountID, originatingTradeID string) (*domain.Position, error)
+	// GetPositionByChainID finds a position (open or closed) by its chain_id.
+	// Returns domain.ErrNotFound if no position exists for that chain.
+	GetPositionByChainID(ctx context.Context, accountID, chainID string) (*domain.Position, error)
+	// ListOpenPositions returns all open positions for an account, ordered by opened_at.
 	ListOpenPositions(ctx context.Context, accountID string) ([]domain.Position, error)
 
+	// CreateLot inserts a new position lot.
 	CreateLot(ctx context.Context, lot *domain.PositionLot) error
+	// GetLot retrieves a position lot by ID, including instrument details.
+	// Returns domain.ErrNotFound if the lot does not exist.
 	GetLot(ctx context.Context, id string) (*domain.PositionLot, error)
+	// ListOpenLotsByInstrument returns open lots for account+instrument, FIFO ordered (oldest first).
 	ListOpenLotsByInstrument(ctx context.Context, accountID, instrumentID string) ([]domain.PositionLot, error)
+	// ListOpenLotsByTrade returns open lots opened by the given trade, FIFO ordered.
+	ListOpenLotsByTrade(ctx context.Context, accountID, tradeID string) ([]domain.PositionLot, error)
+	// ListOpenLotsByChain returns all open lots whose chain_id matches, FIFO ordered.
+	// Used to determine whether a chained position spanning multiple trades is fully closed.
+	ListOpenLotsByChain(ctx context.Context, accountID, chainID string) ([]domain.PositionLot, error)
 	// CloseLot atomically records a lot_closings entry and updates the lot's remaining_quantity.
 	// Pass a non-nil closedAt when the lot is fully closed.
 	CloseLot(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, closedAt *time.Time) error
+	// ListLotClosings retrieves all closing events for a lot, ordered by closed_at.
 	ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error)
 }
 

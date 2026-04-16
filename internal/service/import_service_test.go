@@ -40,11 +40,13 @@ func seedImportAccount(t *testing.T, ctx context.Context, repos *sqlite.Repos) *
 }
 
 func newImportService(repos *sqlite.Repos, hooks ...service.PostImportHook) *service.ImportService {
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, repos.Positions)
 	return service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
 		repos.Instruments,
 		strategy.NewClassifier(),
+		chainSvc,
 		hooks...,
 	)
 }
@@ -185,7 +187,7 @@ func TestImportService_ClosingLegsCreatedFirst(t *testing.T) {
 	assert.Equal(t, domain.PositionEffectOpening, effects[1], "opening leg must be second")
 }
 
-func TestImportService_MultipleGroups(t *testing.T) {
+func TestImportService_MultipleTrades(t *testing.T) {
 	ctx := context.Background()
 	repos := openTestDB(t)
 	acc := seedImportAccount(t, ctx, repos)
@@ -213,7 +215,7 @@ func TestImportService_HookCalled(t *testing.T) {
 	var hookTrades []*domain.Trade
 	hook := service.PostImportHook{
 		Name: "capture",
-		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) error {
+		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
 			hookTrades = append(hookTrades, trade)
 			return nil
 		},
@@ -239,7 +241,7 @@ func TestImportService_HookErrorRecorded(t *testing.T) {
 
 	hook := service.PostImportHook{
 		Name: "failing-hook",
-		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) error {
+		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
 			return errors.New("hook exploded")
 		},
 	}
@@ -285,7 +287,8 @@ func TestImportService_PartialTransactionFailure(t *testing.T) {
 
 	// Fail on the 2nd transaction Create (first succeeds, second fails).
 	txRepo := &failingTxRepo{TransactionRepository: repos.Transactions, failOnNth: 2}
-	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, strategy.NewClassifier())
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, repos.Positions)
+	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, strategy.NewClassifier(), chainSvc)
 
 	exp := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
 	tradeID := uuid.New().String()

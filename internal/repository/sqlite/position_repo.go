@@ -12,14 +12,10 @@ import (
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
-const positionJoinSelect = `
-	SELECT
-		p.id, p.account_id, p.instrument_id, p.quantity, p.cost_basis, p.realized_pnl,
-		p.opened_at, p.updated_at, p.closed_at, p.chain_id, p.strategy_type,
-		i.id, i.symbol, i.asset_class, i.expiration, i.strike, i.option_type,
-		i.multiplier, i.osi_symbol, i.futures_expiry_month, i.exchange_code
-	FROM positions p
-	JOIN instruments i ON p.instrument_id = i.id`
+const positionSelect = `
+	SELECT id, account_id, chain_id, originating_trade_id, underlying_symbol,
+	       strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at
+	FROM positions`
 
 const lotJoinSelect = `
 	SELECT
@@ -41,42 +37,77 @@ func NewPositionRepository(db *sql.DB) *positionRepo {
 	return &positionRepo{db: db}
 }
 
-// UpsertPosition inserts a new position or updates an existing one (by account_id and instrument_id).
-func (r *positionRepo) UpsertPosition(ctx context.Context, pos *domain.Position) error {
+// CreatePosition inserts a new position row.
+func (r *positionRepo) CreatePosition(ctx context.Context, pos *domain.Position) error {
 	s := model.PositionToStorage(*pos)
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO positions (id, account_id, instrument_id, quantity, cost_basis, realized_pnl, opened_at, updated_at, closed_at, chain_id, strategy_type)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(account_id, instrument_id) DO UPDATE SET
-		   quantity      = excluded.quantity,
-		   cost_basis    = excluded.cost_basis,
-		   realized_pnl  = excluded.realized_pnl,
-		   updated_at    = excluded.updated_at,
-		   closed_at     = excluded.closed_at,
-		   chain_id      = excluded.chain_id,
-		   strategy_type = excluded.strategy_type`,
-		s.ID, s.AccountID, s.InstrumentID, s.Quantity, s.CostBasis, s.RealizedPnL,
-		s.OpenedAt, s.UpdatedAt, s.ClosedAt, s.ChainID, s.StrategyType,
+		`INSERT INTO positions
+			(id, account_id, chain_id, originating_trade_id, underlying_symbol,
+			 strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.AccountID, s.ChainID, s.OriginatingTradeID, s.UnderlyingSymbol,
+		s.StrategyType, s.CostBasis, s.RealizedPnL, s.OpenedAt, s.UpdatedAt, s.ClosedAt,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert position: %w", err)
+		return fmt.Errorf("create position: %w", err)
 	}
 	return nil
 }
 
-// GetPosition retrieves a position by account and instrument, including its instrument details.
-// Returns domain.ErrNotFound if no position exists for that account/instrument pair.
-func (r *positionRepo) GetPosition(ctx context.Context, accountID, instrumentID string) (*domain.Position, error) {
+// UpdatePosition updates mutable fields: cost_basis, realized_pnl, strategy_type, updated_at, closed_at.
+func (r *positionRepo) UpdatePosition(ctx context.Context, pos *domain.Position) error {
+	s := model.PositionToStorage(*pos)
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE positions SET
+			cost_basis    = ?,
+			realized_pnl  = ?,
+			strategy_type = ?,
+			updated_at    = ?,
+			closed_at     = ?
+		 WHERE id = ?`,
+		s.CostBasis, s.RealizedPnL, s.StrategyType, s.UpdatedAt, s.ClosedAt, s.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update position: %w", err)
+	}
+	return requireOneRow(res, "position", pos.ID)
+}
+
+// GetPositionByTradeID finds a position by its originating_trade_id.
+// Returns domain.ErrNotFound if no position exists.
+func (r *positionRepo) GetPositionByTradeID(ctx context.Context, accountID, originatingTradeID string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
-		positionJoinSelect+` WHERE p.account_id = ? AND p.instrument_id = ?`,
-		accountID, instrumentID,
+		positionSelect+` WHERE account_id = ? AND originating_trade_id = ?`,
+		accountID, originatingTradeID,
 	).Scan(row.ScanDest()...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
-		return nil, fmt.Errorf("get position: %w", err)
+		return nil, fmt.Errorf("get position by trade id: %w", err)
+	}
+	pos, err := row.ToDomain()
+	if err != nil {
+		return nil, err
+	}
+	return &pos, nil
+}
+
+// GetPositionByChainID returns the position for a chain.
+// The unique constraint on chain_id guarantees at most one result.
+// Returns domain.ErrNotFound if no position exists for that chain.
+func (r *positionRepo) GetPositionByChainID(ctx context.Context, accountID, chainID string) (*domain.Position, error) {
+	var row model.Position
+	err := r.db.QueryRowContext(ctx,
+		positionSelect+` WHERE account_id = ? AND chain_id = ?`,
+		accountID, chainID,
+	).Scan(row.ScanDest()...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get position by chain id: %w", err)
 	}
 	pos, err := row.ToDomain()
 	if err != nil {
@@ -89,7 +120,7 @@ func (r *positionRepo) GetPosition(ctx context.Context, accountID, instrumentID 
 // ordered by opened_at.
 func (r *positionRepo) ListOpenPositions(ctx context.Context, accountID string) ([]domain.Position, error) {
 	rows, err := r.db.QueryContext(ctx,
-		positionJoinSelect+` WHERE p.account_id = ? AND p.closed_at IS NULL ORDER BY p.opened_at`,
+		positionSelect+` WHERE account_id = ? AND closed_at IS NULL ORDER BY opened_at`,
 		accountID,
 	)
 	if err != nil {
@@ -159,7 +190,35 @@ func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, 
 		accountID, instrumentID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("list open lots: %w", err)
+		return nil, fmt.Errorf("list open lots by instrument: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanLotRows(rows)
+}
+
+// ListOpenLotsByTrade returns open lots opened by the given trade, FIFO ordered.
+func (r *positionRepo) ListOpenLotsByTrade(ctx context.Context, accountID, tradeID string) ([]domain.PositionLot, error) {
+	rows, err := r.db.QueryContext(ctx,
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.trade_id = ? AND pl.remaining_quantity != '0'
+		 ORDER BY pl.opened_at ASC`,
+		accountID, tradeID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list open lots by trade: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanLotRows(rows)
+}
+
+// ListOpenLotsByChain returns all open lots in the chain (any trade), FIFO ordered.
+func (r *positionRepo) ListOpenLotsByChain(ctx context.Context, accountID, chainID string) ([]domain.PositionLot, error) {
+	rows, err := r.db.QueryContext(ctx,
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.chain_id = ? AND pl.remaining_quantity != '0'
+		 ORDER BY pl.opened_at ASC`,
+		accountID, chainID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list open lots by chain: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return scanLotRows(rows)

@@ -15,11 +15,17 @@ type StrategyClassifier interface {
 	Classify(legs []strategy.LegShape) domain.StrategyType
 }
 
-// PostImportHook is invoked after each trade group is successfully persisted.
+// TradeChainer creates or extends a chain for a trade and returns the chain ID.
+// *ChainService satisfies this interface.
+type TradeChainer interface {
+	ProcessTrade(ctx context.Context, tradeID string) (string, error)
+}
+
+// PostImportHook is invoked after each trade is successfully persisted and chained.
 // Name identifies the hook in ImportResult.Errors when the hook fails.
 type PostImportHook struct {
 	Name string
-	Run  func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) error
+	Run  func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error
 }
 
 // ImportResult summarizes the outcome of an Import call.
@@ -49,16 +55,19 @@ type ImportService struct {
 	txns        repository.TransactionRepository
 	instruments repository.InstrumentRepository
 	classifier  StrategyClassifier
+	chainer     TradeChainer
 	hooks       []PostImportHook
 }
 
 // NewImportService creates an ImportService with the given dependencies.
-// Optional hooks are run after each trade group is persisted.
+// chainer is called for every trade to create or extend its chain before hooks run.
+// Optional hooks are run after each trade is persisted and chained.
 func NewImportService(
 	trades repository.TradeRepository,
 	txns repository.TransactionRepository,
 	instruments repository.InstrumentRepository,
 	classifier StrategyClassifier,
+	chainer TradeChainer,
 	hooks ...PostImportHook,
 ) *ImportService {
 	return &ImportService{
@@ -66,6 +75,7 @@ func NewImportService(
 		txns:        txns,
 		instruments: instruments,
 		classifier:  classifier,
+		chainer:     chainer,
 		hooks:       hooks,
 	}
 }
@@ -122,19 +132,19 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 		}
 	}
 
-	// 3. Group by TradeID, preserving first-seen order for deterministic processing.
-	groups := make(map[string][]domain.Transaction)
-	var order []string
+	// 3. Group transactions by TradeID, preserving first-seen order for deterministic processing.
+	trades := make(map[string][]domain.Transaction)
+	var tradeOrder []string
 	for _, tx := range fresh {
-		if _, exists := groups[tx.TradeID]; !exists {
-			order = append(order, tx.TradeID)
+		if _, exists := trades[tx.TradeID]; !exists {
+			tradeOrder = append(tradeOrder, tx.TradeID)
 		}
-		groups[tx.TradeID] = append(groups[tx.TradeID], tx)
+		trades[tx.TradeID] = append(trades[tx.TradeID], tx)
 	}
 
-	// 4. Process each group.
-	for _, tradeID := range order {
-		if fatal := s.processGroup(ctx, tradeID, groups[tradeID], result); fatal != nil {
+	// 4. Process each trade.
+	for _, tradeID := range tradeOrder {
+		if fatal := s.processTrade(ctx, tradeID, trades[tradeID], result); fatal != nil {
 			return nil, fatal
 		}
 	}
@@ -142,7 +152,7 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 	return result, nil
 }
 
-// processGroup persists one trade group and fires post-import hooks.
+// processTrade persists one trade and fires post-import hooks.
 // Returns a non-nil error only for fatal infrastructure failures.
 //
 // NOTE: the trade row and transaction rows are written in separate DB calls with no
@@ -156,7 +166,7 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 //
 // Full cross-operation atomicity requires transaction propagation at the repository
 // layer (deferred — see docs/future.md).
-func (s *ImportService) processGroup(ctx context.Context, tradeID string, txs []domain.Transaction, result *ImportResult) error {
+func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []domain.Transaction, result *ImportResult) error {
 	strategyType := s.classifier.Classify(strategy.FromTransactions(txs))
 	trade := buildTrade(tradeID, txs, strategyType)
 
@@ -181,12 +191,23 @@ func (s *ImportService) processGroup(ctx context.Context, tradeID string, txs []
 		}
 	}
 
-	// Run hooks. If any hook fails, the group is counted as Failed (not Imported).
-	// The trade and transactions have already been persisted; hook failures do not
-	// roll back DB writes. Each hook error is individually recorded in result.Errors.
+	// Create or extend the chain for this trade. This is a core write step, not a hook.
+	chainID, err := s.chainer.ProcessTrade(ctx, tradeID)
+	if err != nil {
+		result.Failed++
+		result.Errors = append(result.Errors, ImportError{
+			TradeID: tradeID,
+			Err:     fmt.Errorf("chain trade: %w", err),
+		})
+		return nil
+	}
+
+	// Run hooks with the resolved chain ID. If any hook fails, the trade is counted as
+	// Failed (not Imported). The trade, transactions, and chain have already been
+	// persisted; hook failures do not roll back DB writes.
 	hookFailed := false
 	for _, hook := range s.hooks {
-		if err := hook.Run(ctx, trade, txs); err != nil {
+		if err := hook.Run(ctx, trade, txs, chainID); err != nil {
 			hookFailed = true
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{
