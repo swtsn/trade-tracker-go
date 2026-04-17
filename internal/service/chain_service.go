@@ -14,13 +14,10 @@ import (
 )
 
 // ChainService runs chain detection over an account's trade history.
-// It stamps chain_id onto position lots and position rows via PositionRepository
-// after creating or extending a chain.
 type ChainService struct {
-	chains    repository.ChainRepository
-	trades    repository.TradeRepository
-	txns      repository.TransactionRepository
-	positions repository.PositionRepository
+	chains repository.ChainRepository
+	trades repository.TradeRepository
+	txns   repository.TransactionRepository
 }
 
 // NewChainService creates a ChainService with the given dependencies.
@@ -28,13 +25,11 @@ func NewChainService(
 	chains repository.ChainRepository,
 	trades repository.TradeRepository,
 	txns repository.TransactionRepository,
-	positions repository.PositionRepository,
 ) *ChainService {
 	return &ChainService{
-		chains:    chains,
-		trades:    trades,
-		txns:      txns,
-		positions: positions,
+		chains: chains,
+		trades: trades,
+		txns:   txns,
 	}
 }
 

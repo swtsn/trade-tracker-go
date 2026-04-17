@@ -37,6 +37,8 @@ concerned with positions and P&L only.
   Adjustment` rows.
 
 ## Infrastructure
+- **Analytics data access layer** — `AnalyticsService` currently holds a raw `*sql.DB` and issues queries inline, bypassing the repository abstraction used everywhere else. As query complexity grows this will become hard to test and maintain in isolation. Refactor to a dedicated `AnalyticsRepository` interface (or a set of read-model query methods on existing repositories) so that the service layer stays free of SQL and the queries can be tested or swapped independently.
+
 - **PostgreSQL migration** — SQLite is the initial storage layer. If analytics performance becomes a concern at scale, PostgreSQL is the upgrade path.
 - **Multi-user support** — currently designed as a personal single-user tool.
 - **TLS on gRPC server** — plain TCP for local network use. Add TLS if exposed beyond local network.

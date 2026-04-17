@@ -40,7 +40,7 @@ func seedImportAccount(t *testing.T, ctx context.Context, repos *sqlite.Repos) *
 }
 
 func newImportService(repos *sqlite.Repos, hooks ...service.PostImportHook) *service.ImportService {
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, repos.Positions)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
 	return service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
@@ -287,7 +287,7 @@ func TestImportService_PartialTransactionFailure(t *testing.T) {
 
 	// Fail on the 2nd transaction Create (first succeeds, second fails).
 	txRepo := &failingTxRepo{TransactionRepository: repos.Transactions, failOnNth: 2}
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, repos.Positions)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
 	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, strategy.NewClassifier(), chainSvc)
 
 	exp := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)

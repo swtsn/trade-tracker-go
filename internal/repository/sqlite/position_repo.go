@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
@@ -33,7 +34,7 @@ type positionRepo struct {
 }
 
 // NewPositionRepository creates a new positionRepo backed by the given database.
-func NewPositionRepository(db *sql.DB) *positionRepo {
+func NewPositionRepository(db *sql.DB) repository.PositionRepository {
 	return &positionRepo{db: db}
 }
 
@@ -185,7 +186,7 @@ func (r *positionRepo) GetLot(ctx context.Context, id string) (*domain.PositionL
 // ListOpenLotsByInstrument returns open lots ordered by opened_at ASC (FIFO order).
 func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, instrumentID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.instrument_id = ? AND pl.remaining_quantity != '0'
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.instrument_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
 		 ORDER BY pl.opened_at ASC`,
 		accountID, instrumentID,
 	)
@@ -199,7 +200,7 @@ func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, 
 // ListOpenLotsByTrade returns open lots opened by the given trade, FIFO ordered.
 func (r *positionRepo) ListOpenLotsByTrade(ctx context.Context, accountID, tradeID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.trade_id = ? AND pl.remaining_quantity != '0'
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.trade_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
 		 ORDER BY pl.opened_at ASC`,
 		accountID, tradeID,
 	)
@@ -213,7 +214,7 @@ func (r *positionRepo) ListOpenLotsByTrade(ctx context.Context, accountID, trade
 // ListOpenLotsByChain returns all open lots in the chain (any trade), FIFO ordered.
 func (r *positionRepo) ListOpenLotsByChain(ctx context.Context, accountID, chainID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.chain_id = ? AND pl.remaining_quantity != '0'
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.chain_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
 		 ORDER BY pl.opened_at ASC`,
 		accountID, chainID,
 	)
