@@ -16,7 +16,7 @@ import (
 )
 
 func newChainSvc(repos *sqlite.Repos) *service.ChainService {
-	return service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, repos.Positions)
+	return service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
 }
 
 // TestChainService_OpeningOnlyStartsChain: an opening-only trade creates a chain.

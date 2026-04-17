@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,9 @@ func NewPositionService(positions repository.PositionRepository) *PositionServic
 // position.closed_at when all lots under the position are fully closed.
 func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
 	for _, tx := range txns {
+		if tx.TradeID != tradeID {
+			return fmt.Errorf("position service: transaction %s has trade_id %q, expected %q", tx.ID, tx.TradeID, tradeID)
+		}
 		switch tx.PositionEffect {
 		case domain.PositionEffectClosing:
 			if err := s.processClosing(ctx, tx); err != nil {
@@ -125,6 +129,10 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 	}
 	if len(lots) == 0 {
 		// No open lots to close — may happen for historical data without prior positions.
+		// Log so that mismatches (wrong account_id, wrong instrument, programming bugs)
+		// are detectable in operational logs even though we proceed gracefully.
+		log.Printf("position service: closing tx %s: no open lots for instrument %s in account %s; skipping",
+			tx.ID, tx.Instrument.InstrumentID(), tx.AccountID)
 		return nil
 	}
 
@@ -158,6 +166,18 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 		//   positive open_quantity → BTO/BUY (debit, sign = -1)
 		//   negative open_quantity → STO/SELL (credit, sign = +1)
 		openSign := lotCashFlowSign(lot)
+
+		// Guard against division by zero from bad import data.
+		if lot.OpenQuantity.IsZero() {
+			return fmt.Errorf("lot %s has zero open_quantity; cannot pro-rate fees", lot.ID)
+		}
+		// openFeesProrated uses lot.OpenQuantity (the original full size) as the denominator,
+		// NOT the current remaining quantity. This means fees are matched to the fraction of
+		// the original lot being closed: if 1 of 2 contracts is closed, half the open fees
+		// are attributed to this closing. Over all partial closings the full OpenFees are
+		// recovered exactly. This differs from closeFees (which divides by totalCloseQty,
+		// the current transaction's close size), but both denominators are internally
+		// consistent with their respective totals.
 		openFeesProrated := lot.OpenFees.Mul(closeQty).Div(lot.OpenQuantity.Abs())
 
 		closeCF := closeSign.Mul(tx.FillPrice).Mul(closeQty).Mul(multiplier)
@@ -197,11 +217,22 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 			return fmt.Errorf("close lot %s: %w", lot.ID, err)
 		}
 
-		// TODO: CloseLot and accumulatePnL (UpdatePosition) should run in the same
-		// DB transaction to avoid a window where the lot is closed but the position's
-		// realized_pnl is not yet updated. Fixing this requires transaction-scoped
-		// repository operations (BeginTx on Repos). Acceptable for now given
-		// MaxOpenConns=1 and single-goroutine import processing.
+		// TODO(tracked): CloseLot and accumulatePnL (UpdatePosition) must eventually run
+		// in the same DB transaction. The current gap is not a concurrency issue
+		// (MaxOpenConns=1 prevents concurrent writers), but a crash between the two
+		// calls leaves the lot permanently closed while positions.realized_pnl is never
+		// updated — silently wrong totals with no audit trail.
+		//
+		// To detect divergence, run:
+		//   SELECT lc.lot_id, SUM(lc.realized_pnl) AS lot_pnl,
+		//          p.realized_pnl AS pos_pnl
+		//   FROM lot_closings lc
+		//   JOIN position_lots pl ON pl.id = lc.lot_id
+		//   JOIN positions p ON p.chain_id = pl.chain_id
+		//   GROUP BY lc.lot_id, p.realized_pnl
+		//   HAVING ABS(lot_pnl - pos_pnl) > 0.001;
+		//
+		// Fix requires transaction-scoped repository operations (BeginTx on Repos).
 		if err := s.accumulatePnL(ctx, lot, tx.AccountID, realizedPnL, tx.ExecutedAt); err != nil {
 			return err
 		}
@@ -226,7 +257,13 @@ func (s *PositionService) accumulatePnL(
 	pos, err := s.findPositionForLot(ctx, accountID, lot)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return nil // no position; historical lot without a position row
+			// A lot exists but has no matching position row. This can happen for
+			// historical imports where position tracking was not yet active, but it
+			// also masks bugs (e.g. prior hook failure that skipped CreatePosition).
+			// Log so the discrepancy is detectable; realized_pnl will not be updated.
+			log.Printf("position service: lot %s (chain %s, trade %s) has no position row; realized_pnl not updated",
+				lot.ID, lot.ChainID, lot.TradeID)
+			return nil
 		}
 		return fmt.Errorf("find position for lot %s: %w", lot.ID, err)
 	}

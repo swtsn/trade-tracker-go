@@ -205,9 +205,18 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	// Run hooks with the resolved chain ID. If any hook fails, the trade is counted as
 	// Failed (not Imported). The trade, transactions, and chain have already been
 	// persisted; hook failures do not roll back DB writes.
+	//
+	// Hooks receive transactions in closing-first order, matching the order they were
+	// written to the DB. This satisfies PositionService.ProcessTrade's contract that
+	// txns are in closing-first order.
+	//
+	// Hooks run sequentially and stop at the first failure. A later hook may depend on
+	// state written by an earlier hook (e.g. PositionService creates lots that a
+	// reporting hook reads), so continuing after a failure would observe corrupt state.
+	orderedTxs := closingFirst(txs)
 	hookFailed := false
 	for _, hook := range s.hooks {
-		if err := hook.Run(ctx, trade, txs, chainID); err != nil {
+		if err := hook.Run(ctx, trade, orderedTxs, chainID); err != nil {
 			hookFailed = true
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{
@@ -215,6 +224,7 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 				HookName: hook.Name,
 				Err:      fmt.Errorf("hook %q: %w", hook.Name, err),
 			})
+			break
 		}
 	}
 

@@ -260,7 +260,12 @@ func TestPositionService_FIFOOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, closings, 1)
 	expected := decimal.NewFromFloat(250)
-	assert.True(t, expected.Equal(closings[0].RealizedPnL), "got %s", closings[0].RealizedPnL)
+	assert.True(t, expected.Equal(closings[0].RealizedPnL), "lot closing pnl: got %s", closings[0].RealizedPnL)
+
+	// Position for chainID1 (the closed lot's chain) should reflect the same P&L.
+	pos1, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID1)
+	require.NoError(t, err)
+	assert.True(t, expected.Equal(pos1.RealizedPnL), "position realized_pnl: got %s", pos1.RealizedPnL)
 }
 
 // TestPositionService_ExpirationAtZero: expiration is treated as a close at price=0.

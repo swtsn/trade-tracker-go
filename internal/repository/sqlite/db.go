@@ -71,6 +71,7 @@ func runMigrations(db *sql.DB) error {
 		{7, "migrations/007_contract_spec.sql"},
 		{8, "migrations/008_drop_tx_chain_id.sql"},
 		{9, "migrations/009_restructure_positions.sql"},
+		{10, "migrations/010_positions_chain_id_unique.sql"},
 	}
 
 	for _, m := range migrations {

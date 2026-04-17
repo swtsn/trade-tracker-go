@@ -338,7 +338,7 @@ direction_sign − fees)` across all transactions in the chain's trades (origina
 trades). Uses a `UNION` (not `UNION ALL`) to deduplicate trade IDs, since a roll stores the
 same trade in both `opening_trade_id` and `closing_trade_id` of its link.
 
-## Position Service — Next
+## Position Service
 
 ### Lifecycle
 
@@ -500,3 +500,71 @@ dependency.
 TODO: The initial import (bulk load of historical data into an empty DB) needs dedicated
 design discussion before implementation. Key questions include ordering, lot-match
 correctness across the full history, and chain detection sequencing.
+
+---
+
+## Analytics Service (`internal/service/analytics_service.go`) — Next
+
+Aggregates realized P&L and win-rate statistics from `lot_closings` and `positions`. No
+writes — read-only queries. All monetary outputs use `decimal.Decimal`.
+
+### Entry points
+
+```go
+type AnalyticsService struct {
+    db *sql.DB  // direct query access; no repo indirection needed for read-only aggregates
+}
+
+// GetSymbolPnL returns total realized P&L for a symbol over a date range.
+func (s *AnalyticsService) GetSymbolPnL(ctx context.Context, accountID, symbol string, from, to time.Time) (decimal.Decimal, error)
+
+// GetPnLSummary returns aggregate stats for an account over a date range.
+func (s *AnalyticsService) GetPnLSummary(ctx context.Context, accountID string, from, to time.Time) (*PnLSummary, error)
+
+// GetStrategyPerformance returns per-strategy win rate and average P&L.
+func (s *AnalyticsService) GetStrategyPerformance(ctx context.Context, accountID string, from, to time.Time) ([]StrategyStats, error)
+
+// GetWinRate returns the fraction of closed positions with realized_pnl > 0.
+func (s *AnalyticsService) GetWinRate(ctx context.Context, accountID string, from, to time.Time) (decimal.Decimal, error)
+```
+
+### Output types
+
+```go
+type PnLSummary struct {
+    TotalRealized   decimal.Decimal
+    TotalFees       decimal.Decimal
+    NetPnL          decimal.Decimal   // TotalRealized − TotalFees
+    WinRate         decimal.Decimal   // fraction 0–1
+    PositionsClosed int
+}
+
+type StrategyStats struct {
+    StrategyType  domain.StrategyType
+    Count         int
+    WinRate       decimal.Decimal
+    AveragePnL    decimal.Decimal
+    TotalPnL      decimal.Decimal
+}
+```
+
+### Query design
+
+- `GetSymbolPnL`: `SUM(lc.realized_pnl)` joining `lot_closings` → `position_lots` →
+  `instruments` filtered on `symbol` and `lc.closed_at` within range.
+- `GetPnLSummary`: aggregate `lot_closings` for the account and date range; win rate =
+  positions with `SUM(realized_pnl) > 0` / total closed positions in range.
+- `GetStrategyPerformance`: group by `trades.strategy_type`; join through
+  `lot_closings.closing_tx_id` → `transactions.trade_id` → `trades.strategy_type`.
+- `GetWinRate`: count distinct closed positions (via `positions.closed_at`) where
+  `realized_pnl > 0` divided by total closed.
+
+### Testing
+
+All tests use `:memory:` SQLite. Seed a small set of trades, lots, and lot_closings;
+assert aggregate outputs. Cover:
+- Single closed position, profit
+- Single closed position, loss
+- Mix: win rate = 0.5
+- Multiple strategies
+- Date range filtering (exclude out-of-range closings)
