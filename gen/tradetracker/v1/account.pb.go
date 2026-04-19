@@ -22,6 +22,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Account represents a trading account at a broker.
+// Accounts are created implicitly during CSV import; no mutation RPCs are exposed.
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -98,8 +100,12 @@ func (x *Account) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ListAccountsRequest has no filter parameters; all accounts are returned.
+// page_size and page_token are reserved for future pagination support.
 type ListAccountsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -134,9 +140,24 @@ func (*ListAccountsRequest) Descriptor() ([]byte, []int) {
 	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *ListAccountsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListAccountsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListAccountsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Accounts      []*Account             `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -178,9 +199,16 @@ func (x *ListAccountsResponse) GetAccounts() []*Account {
 	return nil
 }
 
+func (x *ListAccountsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 type GetAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	AccountId     string                 `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,9 +243,9 @@ func (*GetAccountRequest) Descriptor() ([]byte, []int) {
 	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetAccountRequest) GetAccountId() string {
+func (x *GetAccountRequest) GetId() string {
 	if x != nil {
-		return x.AccountId
+		return x.Id
 	}
 	return ""
 }
@@ -277,13 +305,16 @@ const file_tradetracker_v1_account_proto_rawDesc = "" +
 	"\x0eaccount_number\x18\x03 \x01(\tR\raccountNumber\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x15\n" +
-	"\x13ListAccountsRequest\"L\n" +
-	"\x14ListAccountsResponse\x124\n" +
-	"\baccounts\x18\x01 \x03(\v2\x18.tradetracker.v1.AccountR\baccounts\"2\n" +
-	"\x11GetAccountRequest\x12\x1d\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"Q\n" +
+	"\x13ListAccountsRequest\x12\x1b\n" +
+	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\x01 \x01(\tR\taccountId\"H\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"t\n" +
+	"\x14ListAccountsResponse\x124\n" +
+	"\baccounts\x18\x01 \x03(\v2\x18.tradetracker.v1.AccountR\baccounts\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"#\n" +
+	"\x11GetAccountRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
 	"\x12GetAccountResponse\x122\n" +
 	"\aaccount\x18\x01 \x01(\v2\x18.tradetracker.v1.AccountR\aaccount2\xc4\x01\n" +
 	"\x0eAccountService\x12[\n" +
