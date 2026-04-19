@@ -11,10 +11,14 @@ import (
 
 // ListTradesOptions specifies filter and pagination parameters for trade queries.
 type ListTradesOptions struct {
-	Limit      int
-	Offset     int
-	OpenOnly   bool
-	ClosedOnly bool
+	Limit        int
+	Offset       int
+	OpenOnly     bool
+	ClosedOnly   bool
+	Symbol       string              // filter by underlying_symbol; empty = all
+	StrategyType domain.StrategyType // filter by strategy_type; empty = all
+	OpenedAfter  time.Time           // filter opened_at >= value; zero = no lower bound
+	OpenedBefore time.Time           // filter opened_at <= value; zero = no upper bound
 }
 
 // AccountRepository provides access to account data.
@@ -42,6 +46,9 @@ type TransactionRepository interface {
 	Create(ctx context.Context, tx *domain.Transaction) error
 	GetByID(ctx context.Context, id string) (*domain.Transaction, error)
 	ListByTrade(ctx context.Context, tradeID string) ([]domain.Transaction, error)
+	// ListByTradeIDs fetches transactions for multiple trades in a single query,
+	// returning them grouped by trade ID. Missing trade IDs produce no entry in the map.
+	ListByTradeIDs(ctx context.Context, tradeIDs []string) (map[string][]domain.Transaction, error)
 	ListByAccountAndTimeRange(ctx context.Context, accountID string, from, to time.Time) ([]domain.Transaction, error)
 	ExistsByBrokerTxID(ctx context.Context, brokerTxID, broker, accountID string) (bool, error)
 	// FilterExistingBrokerTxIDs returns the subset of keys that already exist in the DB.
@@ -54,11 +61,24 @@ type TradeRepository interface {
 	Create(ctx context.Context, trade *domain.Trade) error
 	// GetByID returns the trade with its Transactions slice populated.
 	GetByID(ctx context.Context, id string) (*domain.Trade, error)
+	// GetByIDAndAccount returns the trade only if it belongs to the given account.
+	// Returns domain.ErrNotFound when the trade does not exist or belongs to a different account.
+	GetByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Trade, error)
 	// ListByAccount returns trades with empty Transactions slices; use GetByID for full detail.
 	// OpenOnly and ClosedOnly in opts are mutually exclusive; both true returns an error.
 	ListByAccount(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
+	// ListByAccountWithTransactions is like ListByAccount but populates each trade's
+	// Transactions slice using a single batch query (no N+1).
+	ListByAccountWithTransactions(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
 	UpdateStrategy(ctx context.Context, id string, strategy domain.StrategyType) error
 	UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error
+}
+
+// TradeReader is the read-only subset of TradeRepository used by the trade gRPC handler.
+// sqlite.tradeRepo satisfies this interface via Repos.Trades.
+type TradeReader interface {
+	GetByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Trade, error)
+	ListByAccountWithTransactions(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
 }
 
 // PositionRepository provides access to position and lot data.

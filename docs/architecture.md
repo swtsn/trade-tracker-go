@@ -14,7 +14,7 @@ Layered architecture: `domain` → `repository` → `service` → `grpc`/`tui`. 
 
 ```
 trade-tracker-go/
-├── buf.yaml / buf.gen.yaml           # ConnectRPC proto generation
+├── buf.yaml / buf.gen.yaml           # gRPC proto generation
 ├── Makefile                          # proto gen, build, test, migrate targets
 ├── docs/                             # architecture, future work
 ├── proto/tradetracker/v1/
@@ -73,7 +73,7 @@ trade-tracker-go/
     │   ├── position_handler.go
     │   ├── analytics_handler.go
     │   └── import_handler.go
-    └── tui/                          # Bubbletea app (Phase 4)
+    └── tui/                          # Bubbletea app (Phase 5)
 ```
 
 ---
@@ -240,7 +240,7 @@ Chain linking is **manual only** in the initial implementation. Auto-detection i
 
 ---
 
-## gRPC Services (ConnectRPC)
+## gRPC Services
 
 **`proto/tradetracker/v1/trade.proto`** — `TradeService`: CreateTrade, GetTrade, ListTrades, UpdateTradeNotes, DeleteTrade
 
@@ -423,15 +423,15 @@ Full SQL in `internal/repository/sqlite/migrations/`.
 
 | Package | Use |
 |---|---|
-| `connectrpc.com/connect` | gRPC transport (HTTP/1.1 + HTTP/2, cleaner than raw grpc) |
+| `google.golang.org/grpc` | gRPC transport |
 | `google.golang.org/protobuf` | Proto runtime |
 | `modernc.org/sqlite` | Pure-Go SQLite — no CGO, works on macOS dev + Linux deploy |
 | `github.com/golang-migrate/migrate/v4` | DB migrations with embedded SQL files |
 | `github.com/shopspring/decimal` | Decimal arithmetic — float64 is unsafe for money; options prices have sub-cent precision so integer-cents doesn't work either |
 | `github.com/google/uuid` | UUIDv7 (RFC 9562) — time-sortable; `ORDER BY id` gives chronological order without a secondary column |
-| `github.com/charmbracelet/bubbletea` | TUI framework (Phase 4) |
-| `github.com/charmbracelet/lipgloss` | TUI styling (Phase 4) |
-| `github.com/charmbracelet/bubbles` | TUI components: table, list, textinput (Phase 4) |
+| `github.com/charmbracelet/bubbletea` | TUI framework (Phase 5) |
+| `github.com/charmbracelet/lipgloss` | TUI styling (Phase 5) |
+| `github.com/charmbracelet/bubbles` | TUI components: table, list, textinput (Phase 5) |
 | `github.com/alecthomas/kong` | CLI subcommands + config (serve, migrate, version) |
 | `github.com/stretchr/testify` | Test assertions |
 | `log/slog` | Structured logging (stdlib, Go 1.21+) |
@@ -459,8 +459,14 @@ Full SQL in `internal/repository/sqlite/migrations/`.
 11. `internal/grpc/` handlers
 12. `cmd/trade-tracker-server/main.go` — wiring, HTTP/2 listener, signal handling
 
-**Phase 4 — TUI Client**
-13. `cmd/trade-tracker-tui/main.go` + `internal/tui/`
+**Phase 4 — Verification & Deployment**
+13. Server CLI (`kong`: serve, migrate, version), graceful shutdown
+14. `make run` local dev target; `make release-server` linux/amd64 cross-compile
+15. `deploy/` systemd unit + install script for Ubuntu
+16. End-to-end manual verification with real SQLite db and real broker CSV data
+
+**Phase 5 — TUI Client**
+17. `cmd/trade-tracker-tui/main.go` + `internal/tui/`
 
 ---
 

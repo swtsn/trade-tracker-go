@@ -14,10 +14,10 @@ import (
 // error server-side once a logger is wired into the handler layer.
 func toGRPCError(err error) error {
 	if errors.Is(err, domain.ErrNotFound) {
-		return status.Error(codes.NotFound, err.Error())
+		return status.Error(codes.NotFound, "not found")
 	}
 	if errors.Is(err, domain.ErrDuplicate) {
-		return status.Error(codes.AlreadyExists, err.Error())
+		return status.Error(codes.AlreadyExists, "already exists")
 	}
 	return status.Error(codes.Internal, "internal server error")
 }

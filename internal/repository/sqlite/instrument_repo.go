@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
@@ -16,7 +17,7 @@ type instrumentRepo struct {
 }
 
 // NewInstrumentRepository creates a new instrumentRepo backed by the given database.
-func NewInstrumentRepository(db *sql.DB) *instrumentRepo {
+func NewInstrumentRepository(db *sql.DB) repository.InstrumentRepository {
 	return &instrumentRepo{db: db}
 }
 

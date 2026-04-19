@@ -14,12 +14,13 @@ import (
 
 // tradeRepo implements the TradeRepository interface.
 type tradeRepo struct {
-	db *sql.DB
+	db   *sql.DB
+	txns repository.TransactionRepository
 }
 
-// NewTradeRepository creates a new tradeRepo backed by the given database.
-func NewTradeRepository(db *sql.DB) *tradeRepo {
-	return &tradeRepo{db: db}
+// NewTradeRepository creates a new tradeRepo backed by the given database and transaction repo.
+func NewTradeRepository(db *sql.DB, txns repository.TransactionRepository) repository.TradeRepository {
+	return &tradeRepo{db: db, txns: txns}
 }
 
 // Create inserts a new trade into the database.
@@ -69,6 +70,32 @@ func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, erro
 	return &trade, nil
 }
 
+// GetByIDAndAccount retrieves a trade by ID only if it belongs to the given account.
+// Returns domain.ErrNotFound when the trade does not exist or belongs to a different account.
+func (r *tradeRepo) GetByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Trade, error) {
+	var s model.Trade
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
+		 FROM trades WHERE id = ? AND account_id = ?`, id, accountID,
+	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get trade by account: %w", err)
+	}
+	trade, err := s.ToDomain()
+	if err != nil {
+		return nil, err
+	}
+	txs, err := loadTransactionsForTrade(ctx, r.db, id)
+	if err != nil {
+		return nil, err
+	}
+	trade.Transactions = txs
+	return &trade, nil
+}
+
 // ListByAccount retrieves trades for an account with optional filtering and pagination.
 // Returns both the matching trades and the total count of trades satisfying the filters.
 // Transactions are not loaded; use GetByID for full trade detail.
@@ -86,6 +113,22 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	} else if opts.ClosedOnly {
 		where += ` AND closed_at IS NOT NULL`
 	}
+	if opts.Symbol != "" {
+		where += ` AND underlying_symbol = ?`
+		args = append(args, opts.Symbol)
+	}
+	if opts.StrategyType != "" {
+		where += ` AND strategy_type = ?`
+		args = append(args, string(opts.StrategyType))
+	}
+	if !opts.OpenedAfter.IsZero() {
+		where += ` AND opened_at >= ?`
+		args = append(args, opts.OpenedAfter.UTC().Format(time.RFC3339))
+	}
+	if !opts.OpenedBefore.IsZero() {
+		where += ` AND opened_at <= ?`
+		args = append(args, opts.OpenedBefore.UTC().Format(time.RFC3339))
+	}
 
 	// Total count.
 	var total int
@@ -95,7 +138,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 
 	// Paginated query.
 	query := `SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
-	          FROM trades ` + where + ` ORDER BY opened_at DESC`
+	          FROM trades ` + where + ` ORDER BY opened_at DESC, id DESC`
 	if opts.Limit > 0 {
 		query += ` LIMIT ? OFFSET ?`
 		args = append(args, opts.Limit, opts.Offset)
@@ -121,6 +164,30 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
+	}
+	return trades, total, nil
+}
+
+// ListByAccountWithTransactions is like ListByAccount but populates each trade's
+// Transactions slice using a single batch query (no N+1).
+func (r *tradeRepo) ListByAccountWithTransactions(ctx context.Context, accountID string, opts repository.ListTradesOptions) ([]domain.Trade, int, error) {
+	trades, total, err := r.ListByAccount(ctx, accountID, opts)
+	if err != nil || len(trades) == 0 {
+		return trades, total, err
+	}
+
+	ids := make([]string, len(trades))
+	for i, t := range trades {
+		ids[i] = t.ID
+	}
+
+	txsByTrade, err := r.txns.ListByTradeIDs(ctx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for i := range trades {
+		trades[i].Transactions = txsByTrade[trades[i].ID]
 	}
 	return trades, total, nil
 }

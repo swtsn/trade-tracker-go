@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 )
 
 // contractSpecRepo implements the ContractSpecRepository interface.
@@ -15,7 +16,7 @@ type contractSpecRepo struct {
 }
 
 // NewContractSpecRepository creates a new contractSpecRepo backed by the given database.
-func NewContractSpecRepository(db *sql.DB) *contractSpecRepo {
+func NewContractSpecRepository(db *sql.DB) repository.ContractSpecRepository {
 	return &contractSpecRepo{db: db}
 }
 

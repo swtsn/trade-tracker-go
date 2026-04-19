@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+import "google/protobuf/timestamp.proto";
+
+service TradeService {
+  // ListTrades returns all trades for an account with embedded transactions.
+  // Supports filtering by symbol, strategy, open/closed state, and time range.
+  rpc ListTrades(ListTradesRequest) returns (ListTradesResponse);
+  // GetTrade returns a single trade by ID with all transactions populated.
+  rpc GetTrade(GetTradeRequest) returns (GetTradeResponse);
+}
+
+// StrategyType mirrors domain.StrategyType.
+enum StrategyType {
+  STRATEGY_TYPE_UNSPECIFIED = 0;
+  STRATEGY_TYPE_UNKNOWN = 1;
+  STRATEGY_TYPE_IRON_BUTTERFLY = 2;
+  STRATEGY_TYPE_IRON_CONDOR = 3;
+  STRATEGY_TYPE_BROKEN_HEART_BUTTERFLY = 4;
+  STRATEGY_TYPE_BUTTERFLY = 5;
+  STRATEGY_TYPE_BROKEN_WING_BUTTERFLY = 6;
+  STRATEGY_TYPE_COVERED_CALL = 7;
+  STRATEGY_TYPE_RATIO = 8;
+  STRATEGY_TYPE_BACK_RATIO = 9;
+  STRATEGY_TYPE_STRADDLE = 10;
+  STRATEGY_TYPE_STRANGLE = 11;
+  STRATEGY_TYPE_VERTICAL = 12;
+  STRATEGY_TYPE_CALENDAR = 13;
+  STRATEGY_TYPE_DIAGONAL = 14;
+  STRATEGY_TYPE_SINGLE = 15;
+  STRATEGY_TYPE_STOCK = 16;
+  STRATEGY_TYPE_FUTURE = 17;
+}
+
+// Action mirrors domain.Action.
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_BTO = 1;
+  ACTION_STO = 2;
+  ACTION_BTC = 3;
+  ACTION_STC = 4;
+  ACTION_BUY = 5;
+  ACTION_SELL = 6;
+  ACTION_ASSIGNMENT = 7;
+  ACTION_EXPIRATION = 8;
+  ACTION_EXERCISE = 9;
+}
+
+// PositionEffect mirrors domain.PositionEffect.
+enum PositionEffect {
+  POSITION_EFFECT_UNSPECIFIED = 0;
+  POSITION_EFFECT_OPENING = 1;
+  POSITION_EFFECT_CLOSING = 2;
+}
+
+// AssetClass mirrors domain.AssetClass.
+enum AssetClass {
+  ASSET_CLASS_UNSPECIFIED = 0;
+  ASSET_CLASS_EQUITY = 1;
+  ASSET_CLASS_EQUITY_OPTION = 2;
+  ASSET_CLASS_FUTURE = 3;
+  ASSET_CLASS_FUTURE_OPTION = 4;
+}
+
+// OptionType mirrors domain.OptionType.
+enum OptionType {
+  OPTION_TYPE_UNSPECIFIED = 0;
+  OPTION_TYPE_CALL = 1;
+  OPTION_TYPE_PUT = 2;
+}
+
+message OptionDetails {
+  google.protobuf.Timestamp expiration = 1;
+  // strike is a decimal string (e.g. "450.00").
+  string strike = 2;
+  OptionType option_type = 3;
+  // multiplier is a decimal string (e.g. "100").
+  string multiplier = 4;
+  // osi is the OCC option symbol identifier.
+  string osi = 5;
+}
+
+message FutureDetails {
+  google.protobuf.Timestamp expiry_month = 1;
+  string exchange_code = 2;
+}
+
+message Instrument {
+  string symbol = 1;
+  AssetClass asset_class = 2;
+  // option is set only when asset_class is EQUITY_OPTION or FUTURE_OPTION.
+  OptionDetails option = 3;
+  // future is set only when asset_class is FUTURE or FUTURE_OPTION.
+  FutureDetails future = 4;
+}
+
+message Transaction {
+  string id = 1;
+  string trade_id = 2;
+  string broker_tx_id = 3;
+  string broker_order_id = 4;
+  string broker = 5;
+  string account_id = 6;
+  Instrument instrument = 7;
+  Action action = 8;
+  // quantity is a decimal string.
+  string quantity = 9;
+  // fill_price is a decimal string.
+  string fill_price = 10;
+  // fees is a decimal string.
+  string fees = 11;
+  google.protobuf.Timestamp executed_at = 12;
+  PositionEffect position_effect = 13;
+}
+
+message Trade {
+  string id = 1;
+  string account_id = 2;
+  string broker = 3;
+  StrategyType strategy_type = 4;
+  string underlying_symbol = 5;
+  google.protobuf.Timestamp opened_at = 6;
+  // closed_at is unset when the trade is still open.
+  google.protobuf.Timestamp closed_at = 7;
+  string notes = 8;
+  repeated Transaction transactions = 9;
+}
+
+message ListTradesRequest {
+  // account_id is required.
+  string account_id = 1;
+  // opened_after and opened_before filter by opened_at; both optional.
+  google.protobuf.Timestamp opened_after = 2;
+  google.protobuf.Timestamp opened_before = 3;
+  // symbol filters by underlying_symbol; empty = all symbols.
+  string symbol = 4;
+  // strategy_type filters by strategy; UNSPECIFIED = all strategies.
+  StrategyType strategy_type = 5;
+  // open_only and closed_only are mutually exclusive.
+  bool open_only = 6;
+  bool closed_only = 7;
+  // page_size caps results; server enforces a maximum of 500. Zero means use the maximum.
+  // page_token is reserved for future cursor-based pagination.
+  int32 page_size = 8;
+  string page_token = 9;
+}
+
+message ListTradesResponse {
+  repeated Trade trades = 1;
+  // total is the count of trades matching the filters (before pagination).
+  int64 total = 2;
+  string next_page_token = 3;
+}
+
+message GetTradeRequest {
+  // account_id is required and enforces ownership. Requests for trades belonging
+  // to a different account return NOT_FOUND.
+  string account_id = 1;
+  string id = 2;
+}
+
+message GetTradeResponse {
+  Trade trade = 1;
+}
