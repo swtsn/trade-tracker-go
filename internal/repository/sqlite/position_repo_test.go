@@ -248,7 +248,7 @@ func TestPositionRepository(t *testing.T) {
 		require.NoError(t, repos.Positions.CreatePosition(ctx, p1))
 		require.NoError(t, repos.Positions.CreatePosition(ctx, p2))
 
-		open, err := repos.Positions.ListOpenPositions(ctx, acc.ID)
+		open, err := repos.Positions.ListPositions(ctx, acc.ID, true)
 		require.NoError(t, err)
 		assert.Len(t, open, 1)
 		assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)
@@ -278,6 +278,38 @@ func TestPositionRepository(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, pos.ID, got.ID)
 		assert.Equal(t, chainID, got.ChainID)
+	})
+
+	t.Run("get position by id and account", func(t *testing.T) {
+		repos := openTestDB(t)
+		acc := seedAccount(t, ctx, repos)
+		acc2 := seedAccount(t, ctx, repos)
+		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+
+		pos := &domain.Position{
+			ID:                 uuid.New().String(),
+			AccountID:          acc.ID,
+			OriginatingTradeID: trade.ID,
+			UnderlyingSymbol:   "SPY",
+			CostBasis:          decimal.NewFromFloat(340),
+			RealizedPnL:        decimal.Zero,
+			OpenedAt:           time.Now().UTC().Truncate(time.Second),
+			UpdatedAt:          time.Now().UTC().Truncate(time.Second),
+		}
+		require.NoError(t, repos.Positions.CreatePosition(ctx, pos))
+
+		// Correct account returns the position.
+		got, err := repos.Positions.GetPositionByIDAndAccount(ctx, acc.ID, pos.ID)
+		require.NoError(t, err)
+		assert.Equal(t, pos.ID, got.ID)
+
+		// Wrong account returns ErrNotFound — ownership enforced at SQL level.
+		_, err = repos.Positions.GetPositionByIDAndAccount(ctx, acc2.ID, pos.ID)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// Non-existent ID also returns ErrNotFound.
+		_, err = repos.Positions.GetPositionByIDAndAccount(ctx, acc.ID, "no-such-id")
+		assert.ErrorIs(t, err, domain.ErrNotFound)
 	})
 
 	t.Run("lot closing round-trip with resulting_lot_id", func(t *testing.T) {

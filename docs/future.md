@@ -37,7 +37,23 @@ concerned with positions and P&L only.
   cash balance but aren't associated with any trade. Tastytrade: `Money Movement / Balance
   Adjustment` rows.
 
+## Admin / Operations
+
+- **Admin API** — long-term, an admin section is needed for operational tasks that fall outside the normal user-facing API. Initial candidate: ad-hoc chain detection (`ChainService.DetectChains`) for backfilling or reprocessing an account's history. Other candidates include manual trade reclassification and position recalculation. These should be separate RPCs (or a separate service) with restricted access, not mixed into the user-facing API.
+
 ## Infrastructure
+- **CloseLot / UpdatePosition atomicity** — `PositionService.processClosing` calls `CloseLot` (inserts a `lot_closings` row and updates `remaining_quantity`) and then `accumulatePnL` (calls `UpdatePosition`) as two separate DB operations with no enclosing transaction. A crash between them leaves a lot permanently closed while `positions.realized_pnl` is never updated — silently wrong totals with no audit trail. The fix requires transaction-scoped repository operations (`BeginTx` propagation on `Repos`). To detect divergence before the fix lands, run:
+  ```sql
+  SELECT lc.lot_id, SUM(lc.realized_pnl) AS lot_pnl, p.realized_pnl AS pos_pnl
+  FROM lot_closings lc
+  JOIN position_lots pl ON pl.id = lc.lot_id
+  JOIN positions p ON p.chain_id = pl.chain_id
+  GROUP BY lc.lot_id, p.realized_pnl
+  HAVING ABS(lot_pnl - pos_pnl) > 0.001;
+  ```
+
+- **`internal/testutil` shared test helpers** — `openTestDB` is duplicated across `internal/service` and `internal/repository/sqlite` test packages. As more packages need DB-backed tests, this will drift further. Consolidate into an `internal/testutil` package (e.g. `testutil.OpenRepos(t)`) so schema changes and helper logic only need updating in one place.
+
 - **Analytics data access layer** — `AnalyticsService` currently holds a raw `*sql.DB` and issues queries inline, bypassing the repository abstraction used everywhere else. As query complexity grows this will become hard to test and maintain in isolation. Refactor to a dedicated `AnalyticsRepository` interface (or a set of read-model query methods on existing repositories) so that the service layer stays free of SQL and the queries can be tested or swapped independently.
 
 - **PostgreSQL migration** — SQLite is the initial storage layer. If analytics performance becomes a concern at scale, PostgreSQL is the upgrade path.

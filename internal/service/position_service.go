@@ -13,6 +13,12 @@ import (
 	"trade-tracker-go/internal/repository"
 )
 
+// ErrNoOpenLots is returned by processClosing when a closing transaction finds no
+// matching open lots for the instrument. Callers decide whether to suppress or
+// propagate; ProcessTrade logs and continues because this is expected for historical
+// imports where prior positions were not tracked.
+var ErrNoOpenLots = errors.New("no open lots for instrument")
+
 // PositionService manages position lots and tracks realized P&L.
 // It is called as a post-import hook after ChainService has assigned a chain ID.
 type PositionService struct {
@@ -22,6 +28,18 @@ type PositionService struct {
 // NewPositionService creates a PositionService with the given repository.
 func NewPositionService(positions repository.PositionRepository) *PositionService {
 	return &PositionService{positions: positions}
+}
+
+// GetPosition returns a position by ID.
+// Returns domain.ErrNotFound if no position exists or accountID does not match.
+func (s *PositionService) GetPosition(ctx context.Context, accountID, positionID string) (*domain.Position, error) {
+	return s.positions.GetPositionByIDAndAccount(ctx, accountID, positionID)
+}
+
+// ListPositions returns positions for an account.
+// When openOnly is true, only positions where closed_at IS NULL are returned.
+func (s *PositionService) ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error) {
+	return s.positions.ListPositions(ctx, accountID, openOnly)
 }
 
 // ProcessTrade processes all transactions for a trade, creating/updating lots and positions.
@@ -38,6 +56,10 @@ func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns
 		switch tx.PositionEffect {
 		case domain.PositionEffectClosing:
 			if err := s.processClosing(ctx, tx); err != nil {
+				if errors.Is(err, ErrNoOpenLots) {
+					log.Printf("position service: closing tx %s: %v; skipping", tx.ID, err)
+					continue
+				}
 				return fmt.Errorf("position service: closing tx %s: %w", tx.ID, err)
 			}
 		case domain.PositionEffectOpening:
@@ -128,12 +150,7 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 		return fmt.Errorf("list open lots: %w", err)
 	}
 	if len(lots) == 0 {
-		// No open lots to close — may happen for historical data without prior positions.
-		// Log so that mismatches (wrong account_id, wrong instrument, programming bugs)
-		// are detectable in operational logs even though we proceed gracefully.
-		log.Printf("position service: closing tx %s: no open lots for instrument %s in account %s; skipping",
-			tx.ID, tx.Instrument.InstrumentID(), tx.AccountID)
-		return nil
+		return fmt.Errorf("%w: instrument %s account %s", ErrNoOpenLots, tx.Instrument.InstrumentID(), tx.AccountID)
 	}
 
 	multiplier := optionMultiplier(tx.Instrument)

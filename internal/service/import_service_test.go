@@ -212,11 +212,11 @@ func TestImportService_HookCalled(t *testing.T) {
 	repos := openTestDB(t)
 	acc := seedImportAccount(t, ctx, repos)
 
-	var hookTrades []*domain.Trade
+	var hookTradeIDs []string
 	hook := service.PostImportHook{
 		Name: "capture",
-		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
-			hookTrades = append(hookTrades, trade)
+		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+			hookTradeIDs = append(hookTradeIDs, tradeID)
 			return nil
 		},
 	}
@@ -230,8 +230,8 @@ func TestImportService_HookCalled(t *testing.T) {
 	result, err := svc.Import(ctx, txs)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
-	require.Len(t, hookTrades, 1)
-	assert.Equal(t, tradeID, hookTrades[0].ID)
+	require.Len(t, hookTradeIDs, 1)
+	assert.Equal(t, tradeID, hookTradeIDs[0])
 }
 
 func TestImportService_HookErrorRecorded(t *testing.T) {
@@ -241,7 +241,7 @@ func TestImportService_HookErrorRecorded(t *testing.T) {
 
 	hook := service.PostImportHook{
 		Name: "failing-hook",
-		Run: func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error {
+		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
 			return errors.New("hook exploded")
 		},
 	}
