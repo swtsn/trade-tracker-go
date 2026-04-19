@@ -21,7 +21,7 @@ type PnLSummary struct {
 	// Zero if no positions were closed in the range.
 	WinRate decimal.Decimal
 	// PositionsClosed is the count of positions whose closed_at falls within the date range.
-	PositionsClosed int
+	PositionsClosed int32
 }
 
 // StrategyStats holds aggregate performance metrics for one strategy type.
@@ -141,7 +141,7 @@ func (s *AnalyticsService) GetPnLSummary(ctx context.Context, accountID string, 
 	}
 	defer func() { _ = posRows.Close() }()
 
-	var total, wins int
+	var total, wins int32
 	for posRows.Next() {
 		var rawPnL string
 		if err := posRows.Scan(&rawPnL); err != nil {

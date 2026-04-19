@@ -37,9 +37,9 @@ func (s *PositionService) GetPosition(ctx context.Context, accountID, positionID
 }
 
 // ListPositions returns positions for an account.
-// When openOnly is true, only positions where closed_at IS NULL are returned.
-func (s *PositionService) ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error) {
-	return s.positions.ListPositions(ctx, accountID, openOnly)
+// openOnly and closedOnly are mutually exclusive; both false returns all positions.
+func (s *PositionService) ListPositions(ctx context.Context, accountID string, openOnly, closedOnly bool) ([]domain.Position, error) {
+	return s.positions.ListPositions(ctx, accountID, openOnly, closedOnly)
 }
 
 // ProcessTrade processes all transactions for a trade, creating/updating lots and positions.

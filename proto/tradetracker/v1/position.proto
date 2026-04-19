@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+import "google/protobuf/timestamp.proto";
+import "tradetracker/v1/trade.proto";
+
+service PositionService {
+  // ListPositions returns positions for an account ordered by opened_at.
+  rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
+  // GetPosition returns a single position by ID.
+  rpc GetPosition(GetPositionRequest) returns (GetPositionResponse);
+}
+
+// PositionStatus filters positions by open/closed state.
+enum PositionStatus {
+  POSITION_STATUS_UNSPECIFIED = 0; // returns all positions
+  POSITION_STATUS_OPEN = 1;
+  POSITION_STATUS_CLOSED = 2;
+}
+
+message Position {
+  string id = 1;
+  string account_id = 2;
+  string chain_id = 3;
+  string underlying_symbol = 4;
+  StrategyType strategy_type = 5;
+  // cost_basis is a decimal string; positive = net credit received; negative = net debit paid.
+  string cost_basis = 6;
+  // realized_pnl is a decimal string; only set for closed positions.
+  string realized_pnl = 7;
+  google.protobuf.Timestamp opened_at = 8;
+  // closed_at is unset when the position is still open.
+  google.protobuf.Timestamp closed_at = 9;
+}
+
+message ListPositionsRequest {
+  // account_id is required.
+  string account_id = 1;
+  // status filters by open/closed state; UNSPECIFIED returns all positions.
+  PositionStatus status = 2;
+  // page_size and page_token are reserved for future cursor-based pagination.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListPositionsResponse {
+  repeated Position positions = 1;
+  // next_page_token is reserved for future cursor-based pagination.
+  string next_page_token = 2;
+}
+
+message GetPositionRequest {
+  // account_id is required and enforces ownership.
+  string account_id = 1;
+  // id is the position ID.
+  string id = 2;
+}
+
+message GetPositionResponse {
+  Position position = 1;
+}

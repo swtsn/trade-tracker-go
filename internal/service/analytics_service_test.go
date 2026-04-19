@@ -73,7 +73,7 @@ func TestAnalyticsService_EmptyRange(t *testing.T) {
 
 	summary, err := asvc.GetPnLSummary(ctx, acc.ID, allTime, now)
 	require.NoError(t, err)
-	assert.Equal(t, 0, summary.PositionsClosed)
+	assert.Equal(t, int32(0), summary.PositionsClosed)
 	assert.True(t, decimal.Zero.Equal(summary.WinRate))
 	assert.True(t, decimal.Zero.Equal(summary.RealizedPnL))
 
@@ -116,7 +116,7 @@ func TestAnalyticsService_WinningPosition(t *testing.T) {
 
 	summary, err := asvc.GetPnLSummary(ctx, acc.ID, allTime, future)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.PositionsClosed)
+	assert.Equal(t, int32(1), summary.PositionsClosed)
 	assert.True(t, decimal.NewFromFloat(1).Equal(summary.WinRate), "win rate should be 1.0")
 	assert.True(t, decimal.NewFromInt(300).Equal(summary.RealizedPnL), "got %s", summary.RealizedPnL)
 }
@@ -149,7 +149,7 @@ func TestAnalyticsService_LosingPosition(t *testing.T) {
 
 	summary, err := asvc.GetPnLSummary(ctx, acc.ID, allTime, future)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.PositionsClosed)
+	assert.Equal(t, int32(1), summary.PositionsClosed)
 	assert.True(t, decimal.Zero.Equal(summary.WinRate), "win rate should be 0")
 	assert.True(t, summary.RealizedPnL.IsNegative(), "P&L should be negative, got %s", summary.RealizedPnL)
 }
@@ -190,7 +190,7 @@ func TestAnalyticsService_MixedWinRate(t *testing.T) {
 
 	summary, err := asvc.GetPnLSummary(ctx, acc.ID, allTime, future)
 	require.NoError(t, err)
-	assert.Equal(t, 2, summary.PositionsClosed)
+	assert.Equal(t, int32(2), summary.PositionsClosed)
 	half := decimal.NewFromFloat(0.5)
 	assert.True(t, half.Equal(summary.WinRate), "got %s", summary.WinRate)
 	// Net P&L: 300 − 200 = 100
@@ -276,7 +276,7 @@ func TestAnalyticsService_DateRangeFilter(t *testing.T) {
 
 	summary, err := asvc.GetPnLSummary(ctx, acc.ID, from, to)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.PositionsClosed, "only the April position should be counted")
+	assert.Equal(t, int32(1), summary.PositionsClosed, "only the April position should be counted")
 	assert.True(t, decimal.NewFromInt(1).Equal(summary.WinRate))
 
 	pnl, err := asvc.GetSymbolPnL(ctx, acc.ID, "SPY", from, to)

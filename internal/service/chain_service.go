@@ -84,6 +84,85 @@ func (s *ChainService) GetChain(ctx context.Context, chainID string) (*domain.Ch
 	return s.chains.GetChainByID(ctx, chainID)
 }
 
+// GetChainDetail returns an enriched chain view with per-event leg details.
+// Returns domain.ErrNotFound when the chain does not exist or belongs to a different account.
+func (s *ChainService) GetChainDetail(ctx context.Context, accountID, chainID string) (*domain.ChainDetail, error) {
+	chain, err := s.chains.GetChainByID(ctx, chainID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("chain detail: get chain: %w", err)
+	}
+	if chain.AccountID != accountID {
+		return nil, domain.ErrNotFound
+	}
+
+	// Collect trade IDs in order: originating trade first, then each link's trade.
+	// Dedup defensively — data integrity violations (e.g. a link pointing at the original
+	// trade) would cause ListByTradeIDs to overwrite the map entry, not double-count, but
+	// deduplication makes the intent explicit and avoids unnecessary work.
+	seen := make(map[string]struct{}, 1+len(chain.Links))
+	seen[chain.OriginalTradeID] = struct{}{}
+	tradeIDs := []string{chain.OriginalTradeID}
+	for _, link := range chain.Links {
+		if _, ok := seen[link.ClosingTradeID]; !ok {
+			seen[link.ClosingTradeID] = struct{}{}
+			tradeIDs = append(tradeIDs, link.ClosingTradeID)
+		}
+	}
+
+	txnsByTrade, err := s.txns.ListByTradeIDs(ctx, tradeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("chain detail: list transactions: %w", err)
+	}
+
+	pnl, err := s.chains.GetChainPnL(ctx, chainID)
+	if err != nil {
+		return nil, fmt.Errorf("chain detail: get pnl: %w", err)
+	}
+
+	events := make([]domain.ChainEvent, 0, 1+len(chain.Links))
+	events = append(events, buildChainEvent(chain.OriginalTradeID, domain.LinkTypeOpen, txnsByTrade[chain.OriginalTradeID]))
+	for _, link := range chain.Links {
+		events = append(events, buildChainEvent(link.ClosingTradeID, link.LinkType, txnsByTrade[link.ClosingTradeID]))
+	}
+
+	return &domain.ChainDetail{
+		Chain:  chain,
+		Events: events,
+		PnL:    pnl,
+	}, nil
+}
+
+// buildChainEvent constructs a ChainEvent from a trade's transactions.
+// CreditDebit is gross-of-fees (same formula as computeCreditDebit); fees are excluded.
+// ChainDetail.PnL is net-of-fees and will not reconcile by summing event CreditDebit values.
+// All legs of a trade share the same ExecutedAt (one fill per order).
+func buildChainEvent(tradeID string, eventType domain.LinkType, txns []domain.Transaction) domain.ChainEvent {
+	ev := domain.ChainEvent{
+		TradeID:   tradeID,
+		EventType: eventType,
+	}
+	for _, tx := range txns {
+		if ev.ExecutedAt.IsZero() {
+			ev.ExecutedAt = tx.ExecutedAt
+		}
+		multiplier := decimal.NewFromInt(1)
+		if tx.Instrument.Option != nil {
+			multiplier = tx.Instrument.Option.Multiplier
+		}
+		sign := domain.CashFlowSign(tx.Action)
+		ev.CreditDebit = ev.CreditDebit.Add(sign.Mul(tx.FillPrice).Mul(tx.Quantity.Abs()).Mul(multiplier))
+		ev.Legs = append(ev.Legs, domain.ChainEventLeg{
+			Action:     tx.Action,
+			Instrument: tx.Instrument,
+			Quantity:   tx.Quantity.Abs(),
+		})
+	}
+	return ev
+}
+
 // ListChains returns chains for an account. Links are not populated; use GetChain for detail.
 func (s *ChainService) ListChains(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error) {
 	return s.chains.ListChainsByAccount(ctx, accountID, openOnly)
@@ -282,8 +361,9 @@ func detectLinkType(txns []domain.Transaction) domain.LinkType {
 	return domain.LinkTypeRoll
 }
 
-// computeCreditDebit returns the net premium across all legs of the trade.
+// computeCreditDebit returns the gross premium across all legs of the trade (fees excluded).
 // Positive = net credit received; negative = net debit paid.
+// Transaction.Quantity is always non-negative; direction is encoded in Action via CashFlowSign.
 func computeCreditDebit(txns []domain.Transaction) decimal.Decimal {
 	total := decimal.Zero
 	for _, tx := range txns {
@@ -292,7 +372,7 @@ func computeCreditDebit(txns []domain.Transaction) decimal.Decimal {
 			multiplier = tx.Instrument.Option.Multiplier
 		}
 		sign := domain.CashFlowSign(tx.Action)
-		total = total.Add(sign.Mul(tx.FillPrice).Mul(tx.Quantity).Mul(multiplier))
+		total = total.Add(sign.Mul(tx.FillPrice).Mul(tx.Quantity.Abs()).Mul(multiplier))
 	}
 	return total
 }
