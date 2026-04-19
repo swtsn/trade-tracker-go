@@ -12,7 +12,7 @@ import (
 )
 
 // AccountHandler implements pb.AccountServiceServer.
-// Auth is enforced by a server-level interceptor; see cmd/trade-tracker-server.
+// Auth is enforced by a server-level interceptor; see cmd/trade-tracker.
 type AccountHandler struct {
 	pb.UnimplementedAccountServiceServer
 	accounts service.AccountReader
