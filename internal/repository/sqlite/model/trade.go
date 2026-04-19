@@ -10,14 +10,15 @@ import (
 
 // Trade holds the flat, SQL-scannable fields for a trades row.
 type Trade struct {
-	ID           string
-	AccountID    string
-	Broker       string
-	StrategyType string
-	OpenedAt     string
-	ClosedAt     sql.NullString
-	Notes        string
-	CreatedAt    string
+	ID               string
+	AccountID        string
+	Broker           string
+	StrategyType     string
+	UnderlyingSymbol string
+	OpenedAt         string
+	ClosedAt         sql.NullString
+	Notes            string
+	CreatedAt        string
 }
 
 // ToDomain converts to a domain.Trade (without Transactions — caller loads those).
@@ -28,12 +29,13 @@ func (s Trade) ToDomain() (domain.Trade, error) {
 	}
 
 	trade := domain.Trade{
-		ID:           s.ID,
-		AccountID:    s.AccountID,
-		Broker:       s.Broker,
-		StrategyType: domain.StrategyType(s.StrategyType),
-		OpenedAt:     openedAt,
-		Notes:        s.Notes,
+		ID:               s.ID,
+		AccountID:        s.AccountID,
+		Broker:           s.Broker,
+		StrategyType:     domain.StrategyType(s.StrategyType),
+		UnderlyingSymbol: s.UnderlyingSymbol,
+		OpenedAt:         openedAt,
+		Notes:            s.Notes,
 	}
 
 	if s.ClosedAt.Valid {
@@ -51,13 +53,14 @@ func (s Trade) ToDomain() (domain.Trade, error) {
 // recording the current time as created_at.
 func TradeToStorage(trade domain.Trade, now time.Time) Trade {
 	s := Trade{
-		ID:           trade.ID,
-		AccountID:    trade.AccountID,
-		Broker:       trade.Broker,
-		StrategyType: string(trade.StrategyType),
-		OpenedAt:     trade.OpenedAt.UTC().Format(time.RFC3339),
-		Notes:        trade.Notes,
-		CreatedAt:    now.UTC().Format(time.RFC3339),
+		ID:               trade.ID,
+		AccountID:        trade.AccountID,
+		Broker:           trade.Broker,
+		StrategyType:     string(trade.StrategyType),
+		UnderlyingSymbol: trade.UnderlyingSymbol,
+		OpenedAt:         trade.OpenedAt.UTC().Format(time.RFC3339),
+		Notes:            trade.Notes,
+		CreatedAt:        now.UTC().Format(time.RFC3339),
 	}
 	if trade.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: trade.ClosedAt.UTC().Format(time.RFC3339), Valid: true}

@@ -167,6 +167,15 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 // Full cross-operation atomicity requires transaction propagation at the repository
 // layer (deferred — see docs/future.md).
 func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []domain.Transaction, result *ImportResult) error {
+	if !allSameUnderlying(txs) {
+		result.Failed++
+		result.Errors = append(result.Errors, ImportError{
+			TradeID: tradeID,
+			Err:     fmt.Errorf("mixed underlying symbols in trade group — possible CSV grouping error"),
+		})
+		return nil
+	}
+
 	strategyType := s.classifier.Classify(strategy.FromTransactions(txs))
 	trade := buildTrade(tradeID, txs, strategyType)
 
@@ -236,7 +245,8 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 }
 
 // buildTrade constructs a domain.Trade from a group of transactions.
-// AccountID and Broker are taken from the first transaction (all legs share them).
+// AccountID, Broker, and UnderlyingSymbol are taken from the first transaction (all legs
+// share them). UnderlyingSymbol prefers the first opening leg; falls back to txs[0].
 // OpenedAt is the earliest ExecutedAt across the group.
 // txs must not be empty.
 func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.StrategyType) *domain.Trade {
@@ -250,12 +260,29 @@ func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.St
 		}
 	}
 	return &domain.Trade{
-		ID:           tradeID,
-		AccountID:    txs[0].AccountID,
-		Broker:       txs[0].Broker,
-		StrategyType: strategyType,
-		OpenedAt:     earliest,
+		ID:               tradeID,
+		AccountID:        txs[0].AccountID,
+		Broker:           txs[0].Broker,
+		StrategyType:     strategyType,
+		UnderlyingSymbol: underlyingSymbol(txs),
+		OpenedAt:         earliest,
 	}
+}
+
+// allSameUnderlying reports whether every transaction in the group shares the same
+// Instrument.Symbol. A mismatch indicates a CSV grouping error or unsupported
+// multi-underlying trade and should fail loudly rather than silently store a wrong symbol.
+func allSameUnderlying(txs []domain.Transaction) bool {
+	if len(txs) == 0 {
+		return true
+	}
+	sym := txs[0].Instrument.Symbol
+	for _, tx := range txs[1:] {
+		if tx.Instrument.Symbol != sym {
+			return false
+		}
+	}
+	return true
 }
 
 // closingFirst returns a copy of txs with closing legs before opening legs,

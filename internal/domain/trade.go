@@ -29,12 +29,13 @@ const (
 // A trade may be long (buy to open, sell to close) or short (sell to open, buy to close).
 // It may also include options with associated strikes and expirations.
 type Trade struct {
-	ID           string
-	AccountID    string
-	Broker       string
-	Transactions []Transaction
-	StrategyType StrategyType
-	OpenedAt     time.Time
-	ClosedAt     *time.Time
-	Notes        string
+	ID               string
+	AccountID        string
+	Broker           string
+	Transactions     []Transaction
+	StrategyType     StrategyType
+	UnderlyingSymbol string
+	OpenedAt         time.Time
+	ClosedAt         *time.Time
+	Notes            string
 }

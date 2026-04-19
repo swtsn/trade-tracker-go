@@ -25,7 +25,7 @@ transactions, match lots, compute P&L, and classify strategies.
 | Contract spec table | ✅ done |
 | Position service | ✅ done |
 | Chain service | ✅ done |
-| Analytics service | 🔲 upcoming |
+| Analytics service | ✅ done |
 
 ---
 
