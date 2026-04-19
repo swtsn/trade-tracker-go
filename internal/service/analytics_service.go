@@ -246,13 +246,3 @@ func (s *AnalyticsService) GetStrategyPerformance(ctx context.Context, accountID
 	}
 	return out, nil
 }
-
-// GetWinRate returns the fraction of closed positions with positive realized P&L
-// whose closed_at falls within the date range. Returns zero if no positions were closed.
-func (s *AnalyticsService) GetWinRate(ctx context.Context, accountID string, from, to time.Time) (decimal.Decimal, error) {
-	summary, err := s.GetPnLSummary(ctx, accountID, from, to)
-	if err != nil {
-		return decimal.Zero, fmt.Errorf("analytics: get win rate: %w", err)
-	}
-	return summary.WinRate, nil
-}

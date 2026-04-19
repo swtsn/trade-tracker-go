@@ -73,8 +73,17 @@ type PositionRepository interface {
 	// GetPositionByChainID finds a position (open or closed) by its chain_id.
 	// Returns domain.ErrNotFound if no position exists for that chain.
 	GetPositionByChainID(ctx context.Context, accountID, chainID string) (*domain.Position, error)
-	// ListOpenPositions returns all open positions for an account, ordered by opened_at.
-	ListOpenPositions(ctx context.Context, accountID string) ([]domain.Position, error)
+	// GetPositionByID returns a position by its ID.
+	// Returns domain.ErrNotFound if no position exists with that ID.
+	GetPositionByID(ctx context.Context, id string) (*domain.Position, error)
+	// GetPositionByIDAndAccount returns a position by its ID only if it belongs to the given account.
+	// Returns domain.ErrNotFound if no position exists with that ID and account combination.
+	// Use this in preference to GetPositionByID when an accountID is available, to enforce
+	// ownership at the SQL level rather than in the service layer.
+	GetPositionByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Position, error)
+	// ListPositions returns positions for an account ordered by opened_at.
+	// When openOnly is true, only positions where closed_at IS NULL are returned.
+	ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error)
 
 	// CreateLot inserts a new position lot.
 	CreateLot(ctx context.Context, lot *domain.PositionLot) error

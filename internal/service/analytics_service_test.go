@@ -80,10 +80,6 @@ func TestAnalyticsService_EmptyRange(t *testing.T) {
 	stats, err := asvc.GetStrategyPerformance(ctx, acc.ID, allTime, now)
 	require.NoError(t, err)
 	assert.Empty(t, stats)
-
-	wr, err := asvc.GetWinRate(ctx, acc.ID, allTime, now)
-	require.NoError(t, err)
-	assert.True(t, decimal.Zero.Equal(wr))
 }
 
 // TestAnalyticsService_WinningPosition: a single winning trade → win rate 1.0 and correct P&L.
@@ -123,10 +119,6 @@ func TestAnalyticsService_WinningPosition(t *testing.T) {
 	assert.Equal(t, 1, summary.PositionsClosed)
 	assert.True(t, decimal.NewFromFloat(1).Equal(summary.WinRate), "win rate should be 1.0")
 	assert.True(t, decimal.NewFromInt(300).Equal(summary.RealizedPnL), "got %s", summary.RealizedPnL)
-
-	wr, err := asvc.GetWinRate(ctx, acc.ID, allTime, future)
-	require.NoError(t, err)
-	assert.True(t, decimal.NewFromInt(1).Equal(wr), "got %s", wr)
 }
 
 // TestAnalyticsService_LosingPosition: a single losing trade → win rate 0, negative P&L.
@@ -160,10 +152,6 @@ func TestAnalyticsService_LosingPosition(t *testing.T) {
 	assert.Equal(t, 1, summary.PositionsClosed)
 	assert.True(t, decimal.Zero.Equal(summary.WinRate), "win rate should be 0")
 	assert.True(t, summary.RealizedPnL.IsNegative(), "P&L should be negative, got %s", summary.RealizedPnL)
-
-	wr, err := asvc.GetWinRate(ctx, acc.ID, allTime, future)
-	require.NoError(t, err)
-	assert.True(t, decimal.Zero.Equal(wr))
 }
 
 // TestAnalyticsService_MixedWinRate: two positions — one win, one loss → win rate 0.5.
@@ -207,10 +195,6 @@ func TestAnalyticsService_MixedWinRate(t *testing.T) {
 	assert.True(t, half.Equal(summary.WinRate), "got %s", summary.WinRate)
 	// Net P&L: 300 − 200 = 100
 	assert.True(t, decimal.NewFromInt(100).Equal(summary.RealizedPnL), "got %s", summary.RealizedPnL)
-
-	wr, err := asvc.GetWinRate(ctx, acc.ID, allTime, future)
-	require.NoError(t, err)
-	assert.True(t, half.Equal(wr), "got %s", wr)
 }
 
 // TestAnalyticsService_GetSymbolPnL_SymbolFilter: P&L for different underlyings is reported

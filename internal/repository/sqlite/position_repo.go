@@ -117,15 +117,57 @@ func (r *positionRepo) GetPositionByChainID(ctx context.Context, accountID, chai
 	return &pos, nil
 }
 
-// ListOpenPositions retrieves all open positions for an account (closed_at IS NULL),
-// ordered by opened_at.
-func (r *positionRepo) ListOpenPositions(ctx context.Context, accountID string) ([]domain.Position, error) {
-	rows, err := r.db.QueryContext(ctx,
-		positionSelect+` WHERE account_id = ? AND closed_at IS NULL ORDER BY opened_at`,
-		accountID,
-	)
+// GetPositionByID returns a position by its ID.
+// Returns domain.ErrNotFound if no position exists with that ID.
+func (r *positionRepo) GetPositionByID(ctx context.Context, id string) (*domain.Position, error) {
+	var row model.Position
+	err := r.db.QueryRowContext(ctx,
+		positionSelect+` WHERE id = ?`, id,
+	).Scan(row.ScanDest()...)
 	if err != nil {
-		return nil, fmt.Errorf("list open positions: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get position by id: %w", err)
+	}
+	pos, err := row.ToDomain()
+	if err != nil {
+		return nil, err
+	}
+	return &pos, nil
+}
+
+// GetPositionByIDAndAccount returns a position by its ID and account ID.
+// Returns domain.ErrNotFound if no position exists with that ID and account combination.
+func (r *positionRepo) GetPositionByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Position, error) {
+	var row model.Position
+	err := r.db.QueryRowContext(ctx,
+		positionSelect+` WHERE id = ? AND account_id = ?`, id, accountID,
+	).Scan(row.ScanDest()...)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get position by id and account: %w", err)
+	}
+	pos, err := row.ToDomain()
+	if err != nil {
+		return nil, err
+	}
+	return &pos, nil
+}
+
+// ListPositions returns positions for an account ordered by opened_at.
+// When openOnly is true, only positions where closed_at IS NULL are returned.
+func (r *positionRepo) ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error) {
+	q := positionSelect + ` WHERE account_id = ?`
+	if openOnly {
+		q += ` AND closed_at IS NULL`
+	}
+	q += ` ORDER BY opened_at`
+	rows, err := r.db.QueryContext(ctx, q, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list positions: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -186,7 +228,7 @@ func (r *positionRepo) GetLot(ctx context.Context, id string) (*domain.PositionL
 // ListOpenLotsByInstrument returns open lots ordered by opened_at ASC (FIFO order).
 func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, instrumentID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.instrument_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.instrument_id = ? AND pl.remaining_quantity != '0'
 		 ORDER BY pl.opened_at ASC`,
 		accountID, instrumentID,
 	)
@@ -200,7 +242,7 @@ func (r *positionRepo) ListOpenLotsByInstrument(ctx context.Context, accountID, 
 // ListOpenLotsByTrade returns open lots opened by the given trade, FIFO ordered.
 func (r *positionRepo) ListOpenLotsByTrade(ctx context.Context, accountID, tradeID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.trade_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.trade_id = ? AND pl.remaining_quantity != '0'
 		 ORDER BY pl.opened_at ASC`,
 		accountID, tradeID,
 	)
@@ -214,7 +256,7 @@ func (r *positionRepo) ListOpenLotsByTrade(ctx context.Context, accountID, trade
 // ListOpenLotsByChain returns all open lots in the chain (any trade), FIFO ordered.
 func (r *positionRepo) ListOpenLotsByChain(ctx context.Context, accountID, chainID string) ([]domain.PositionLot, error) {
 	rows, err := r.db.QueryContext(ctx,
-		lotJoinSelect+` WHERE pl.account_id = ? AND pl.chain_id = ? AND CAST(pl.remaining_quantity AS REAL) != 0
+		lotJoinSelect+` WHERE pl.account_id = ? AND pl.chain_id = ? AND pl.remaining_quantity != '0'
 		 ORDER BY pl.opened_at ASC`,
 		accountID, chainID,
 	)

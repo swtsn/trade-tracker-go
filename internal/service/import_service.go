@@ -9,32 +9,20 @@ import (
 	"trade-tracker-go/internal/strategy"
 )
 
-// StrategyClassifier classifies a set of transaction legs into a strategy type.
-// *strategy.Classifier satisfies this interface with no changes.
-type StrategyClassifier interface {
-	Classify(legs []strategy.LegShape) domain.StrategyType
-}
-
-// TradeChainer creates or extends a chain for a trade and returns the chain ID.
-// *ChainService satisfies this interface.
-type TradeChainer interface {
-	ProcessTrade(ctx context.Context, tradeID string) (string, error)
-}
-
 // PostImportHook is invoked after each trade is successfully persisted and chained.
 // Name identifies the hook in ImportResult.Errors when the hook fails.
 type PostImportHook struct {
 	Name string
-	Run  func(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, chainID string) error
+	Run  func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error
 }
 
 // ImportResult summarizes the outcome of an Import call.
-// Imported counts trade groups where all DB writes and hooks succeeded.
-// Failed counts trade groups where any DB write or hook failed.
-// Imported + Failed + Skipped == total input transaction groups (after dedup).
+// Imported and Failed count trade groups (one entry per TradeID).
+// Skipped counts individual transactions (not groups) skipped due to duplicate BrokerTxID.
+// There is no single invariant across all three counters because they measure different units.
 type ImportResult struct {
 	Imported int // trade groups fully persisted with all hooks successful
-	Skipped  int // transactions skipped due to duplicate BrokerTxID
+	Skipped  int // individual transactions skipped due to duplicate BrokerTxID
 	Failed   int // trade groups (or hooks) that errored
 	Errors   []ImportError
 }
@@ -189,7 +177,9 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	}
 
 	// Create transactions: closing legs first, then opening legs.
-	for _, tx := range closingFirst(txs) {
+	// orderedTxs is also passed to hooks below so closingFirst is called only once.
+	orderedTxs := closingFirst(txs)
+	for _, tx := range orderedTxs {
 		if err := s.txns.Create(ctx, &tx); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{
@@ -222,10 +212,9 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	// Hooks run sequentially and stop at the first failure. A later hook may depend on
 	// state written by an earlier hook (e.g. PositionService creates lots that a
 	// reporting hook reads), so continuing after a failure would observe corrupt state.
-	orderedTxs := closingFirst(txs)
 	hookFailed := false
 	for _, hook := range s.hooks {
-		if err := hook.Run(ctx, trade, orderedTxs, chainID); err != nil {
+		if err := hook.Run(ctx, trade.ID, orderedTxs, chainID); err != nil {
 			hookFailed = true
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{

@@ -444,7 +444,7 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	chainID3 := seedPositionChain(t, ctx, repos, acc, trade3ID)
 	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{buyTx}, chainID3))
 
-	open, err := repos.Positions.ListOpenPositions(ctx, acc.ID)
+	open, err := repos.Positions.ListPositions(ctx, acc.ID, true)
 	require.NoError(t, err)
 	require.Len(t, open, 1, "only AAPL position should be open")
 	assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)
@@ -567,6 +567,8 @@ func seedPositionChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, a
 // --- helpers ---
 
 // findLotID returns the ID of a closed lot for the given instrument (for retrieving closings).
+// remaining_quantity is stored as TEXT via decimal.String(); '0' is the canonical zero value.
+// The repository API does not expose a method to query by closed state, so raw SQL is required here.
 func findLotID(t *testing.T, ctx context.Context, repos *sqlite.Repos, accountID, instrumentID string) string {
 	t.Helper()
 	rows, err := repos.DB().QueryContext(ctx,
