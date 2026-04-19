@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+// ImportService accepts raw broker CSV exports and persists the normalized
+// transactions. It is the entry point for all trade data ingestion.
+service ImportService {
+  // ImportTransactions parses a broker CSV export and persists the resulting
+  // transactions. The response is streamed so the caller can observe progress
+  // as each trade group is processed. In the current implementation a single
+  // summary response is sent; future versions may stream per-group events.
+  rpc ImportTransactions(ImportTransactionsRequest)
+      returns (stream ImportTransactionsResponse);
+}
+
+// Broker identifies the source brokerage and selects the CSV parser.
+enum Broker {
+  BROKER_UNSPECIFIED = 0;
+  BROKER_TASTYTRADE = 1;
+  BROKER_SCHWAB = 2;
+}
+
+message ImportTransactionsRequest {
+  // account_id is the internal ID of the account the CSV belongs to.
+  string account_id = 1;
+  // broker selects the CSV parser. Must not be BROKER_UNSPECIFIED.
+  Broker broker = 2;
+  // csv_data is the raw CSV file contents (≤ 1 MB).
+  bytes csv_data = 3;
+}
+
+message ImportTransactionsResponse {
+  // imported is the number of trade groups fully persisted.
+  uint32 imported = 1;
+  // skipped is the number of individual transactions skipped due to duplicate broker TX IDs.
+  uint32 skipped = 2;
+  // failed is the number of trade groups (or hooks) that errored.
+  uint32 failed = 3;
+  // errors contains per-trade-group failure details when failed > 0.
+  repeated ImportError errors = 4;
+}
+
+// ImportError describes a failure for one trade group or post-import hook.
+message ImportError {
+  // trade_id is the broker-assigned trade identifier.
+  string trade_id = 1;
+  // hook_name is non-empty when the failure occurred in a post-import hook.
+  string hook_name = 2;
+  // message is the human-readable error description.
+  string message = 3;
+}

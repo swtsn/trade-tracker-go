@@ -21,8 +21,8 @@ be exercised end-to-end with `buf curl` or a generated client.
 | `underlying_symbol` migration + denormalization | ✅ |
 | Service interface extraction | ✅ |
 | buf toolchain setup | ✅ |
-| `account.proto` + handler | 🔲 |
-| `import.proto` + handler | 🔲 |
+| `account.proto` + handler | ✅ |
+| `import.proto` + handler | ✅ |
 | `trade.proto` + handler | 🔲 |
 | `position.proto` + handler | 🔲 |
 | `chain.proto` + handler | 🔲 |
