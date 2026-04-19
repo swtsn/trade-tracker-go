@@ -6,6 +6,8 @@ option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
 
 import "google/protobuf/timestamp.proto";
 
+// Account represents a trading account at a broker.
+// Accounts are created implicitly during CSV import; no mutation RPCs are exposed.
 message Account {
   string id = 1;
   string broker = 2;
@@ -19,14 +21,20 @@ service AccountService {
   rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
 }
 
-message ListAccountsRequest {}
+// ListAccountsRequest has no filter parameters; all accounts are returned.
+// page_size and page_token are reserved for future pagination support.
+message ListAccountsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
 
 message ListAccountsResponse {
   repeated Account accounts = 1;
+  string next_page_token = 2;
 }
 
 message GetAccountRequest {
-  string account_id = 1;
+  string id = 1;
 }
 
 message GetAccountResponse {

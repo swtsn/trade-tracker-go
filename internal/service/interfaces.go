@@ -9,6 +9,14 @@ import (
 	"trade-tracker-go/internal/strategy"
 )
 
+// AccountReader queries account data.
+// Used by the account gRPC handler.
+// *sqlite.AccountRepo satisfies this interface via repos.Accounts.
+type AccountReader interface {
+	GetByID(ctx context.Context, id string) (*domain.Account, error)
+	List(ctx context.Context) ([]domain.Account, error)
+}
+
 // StrategyClassifier classifies a set of transaction legs into a strategy type.
 // *strategy.Classifier satisfies this interface.
 type StrategyClassifier interface {
