@@ -7,8 +7,9 @@
       "Bash(grep -n \"^Account\\\\|^,Exec Time\\\\|^$\" /repos/trade-tracker-go/data/2026-04-06-AccountStatement-029.csv)",
       "Bash(awk -F',' '{print $6}')",
       "Bash(git stash:*)",
-      "Bash(golangci-lint run:*)",
-      "Bash(awk -F',' '{print $7}')"
+      "Bash(golangci-lint:*)",
+      "Bash(awk -F',' '{print $7}')",
+      "Bash(buf:*)"
     ]
   }
 }

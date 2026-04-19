@@ -1,7 +1,7 @@
 # Phase 3 — gRPC Server
 
 Build the gRPC API layer. No TUI yet. At the end of this phase: a running server binary
-that accepts connections, exposes all service-layer capabilities over ConnectRPC, and can
+that accepts connections, exposes all service-layer capabilities over raw gRPC, and can
 be exercised end-to-end with `buf curl` or a generated client.
 
 ---
@@ -19,15 +19,43 @@ be exercised end-to-end with `buf curl` or a generated client.
 | Component | Status |
 |---|---|
 | `underlying_symbol` migration + denormalization | ✅ |
-| Service interface extraction | 🔲 |
-| buf toolchain setup | 🔲 |
+| Service interface extraction | ✅ |
+| buf toolchain setup | ✅ |
+| `account.proto` + handler | 🔲 |
 | `import.proto` + handler | 🔲 |
 | `trade.proto` + handler | 🔲 |
 | `position.proto` + handler | 🔲 |
-| `analytics.proto` + handler | 🔲 |
 | `chain.proto` + handler | 🔲 |
+| `analytics.proto` + handler | 🔲 |
 | Server binary wiring | 🔲 |
 | End-to-end smoke test | 🔲 |
+
+---
+
+## User-Facing Features → RPC Mapping
+
+| UX feature | Service | Key RPCs |
+|---|---|---|
+| Account enumeration | AccountService | `ListAccounts`, `GetAccount` |
+| Open positions view | PositionService | `ListPositions(open_only=true)` |
+| Historic positions view | PositionService | `ListPositions(open_only=false)` |
+| Position lifecycle / chain drill-down | ChainService | `GetChain(position.chain_id)` |
+| Trades audit view | TradeService | `ListTrades`, `GetTrade` |
+| Analytics — account summary + win rate | AnalyticsService | `GetAccountSummary` |
+| Analytics — per-symbol | AnalyticsService | `GetSymbolPerformance` |
+| Analytics — per-strategy | AnalyticsService | `GetStrategyPerformance` |
+| Admin — import CSV | ImportService | `ImportTransactions` |
+
+Chains are not listed directly; they are always accessed via `position.chain_id`.
+
+`GetChain` returns a rich `ChainDetail` response with the full position lifecycle:
+one event per trade (OPEN → ROLLs → CLOSE/ASSIGNMENT/EXERCISE), each with
+action+instrument per leg and a net credit/debit for the trade. No per-leg prices.
+
+`ListTrades` supports filtering by `account_id`, `from`, `to`, `symbol`, and `strategy_type`.
+
+All RPCs are scoped to a single `account_id`. The TUI calls `ListAccounts` to enumerate
+accounts, then queries each independently; no cross-account aggregation RPCs.
 
 ---
 
@@ -55,12 +83,12 @@ map domain types → proto response types. No business logic lives here.
 
 ```
 internal/grpc/
-├── server.go            # grpc.Server setup, service registration, Serve()
-├── import_handler.go    # calls broker parser + ImportService.Import()
-├── trade_handler.go     # calls TradeService (read-only queries)
-├── position_handler.go  # calls PositionService (read-only queries)
-├── analytics_handler.go # calls AnalyticsService
-└── chain_handler.go     # calls ChainService
+├── server.go              # grpc.Server setup, service registration, Serve()
+├── import_handler.go      # calls broker parser + ImportService.Import()
+├── transaction_handler.go # calls TransactionService (read-only queries)
+├── position_handler.go    # calls PositionService (read-only queries)
+├── chain_handler.go       # calls ChainService
+└── analytics_handler.go   # calls AnalyticsService
 ```
 
 ### Import handler note
@@ -71,9 +99,9 @@ parser selection is a simple switch; no registry needed at this scale.
 
 ```go
 func (h *ImportHandler) ImportTransactions(ctx context.Context,
-    req *connect.Request[v1.ImportTransactionsRequest]) (*connect.Response[v1.ImportTransactionsResponse], error) {
+    req *v1.ImportTransactionsRequest, stream grpc.ServerStreamingServer[v1.ImportTransactionsResponse]) error {
 
-    txns, err := h.parse(req.Msg.Broker, req.Msg.CsvData)
+    txns, err := h.parse(req.Broker, req.CsvData)
     // ...
     result, err := h.importSvc.Import(ctx, txns)
     // ...map result → proto response
@@ -140,43 +168,21 @@ This is consistent with AIP-158 and avoids the offset-pagination anomalies that 
 
 ## Error Mapping
 
-Domain errors map to Connect status codes in a central helper:
+Domain errors map to gRPC status codes in a central helper:
 
-| Domain error | Connect code |
+| Domain error | gRPC code |
 |---|---|
-| `domain.ErrNotFound` | `connect.CodeNotFound` |
-| `domain.ErrDuplicate` | `connect.CodeAlreadyExists` |
-| validation errors | `connect.CodeInvalidArgument` |
-| everything else | `connect.CodeInternal` |
+| `domain.ErrNotFound` | `codes.NotFound` |
+| `domain.ErrDuplicate` | `codes.AlreadyExists` |
+| validation errors | `codes.InvalidArgument` |
+| everything else | `codes.Internal` |
 
 ---
 
 ## Service Interfaces
 
-The service layer currently exposes concrete structs (`*ImportService`, `*PositionService`,
-etc.). Handlers must depend on interfaces so they can be tested with fakes. Each service
-gets a matching interface in `internal/service/interfaces.go`:
-
-```go
-type Importer interface {
-    Import(ctx context.Context, txns []domain.Transaction) (*ImportResult, error)
-}
-
-type PositionProcessor interface {
-    ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error
-    // read-only query methods used by the position handler
-}
-
-type Analytics interface {
-    GetSymbolPnL(...)      (decimal.Decimal, error)
-    GetPnLSummary(...)     (*PnLSummary, error)
-    GetStrategyPerformance(...) ([]StrategyStats, error)
-    GetWinRate(...)        (decimal.Decimal, error)
-}
-```
-
-The concrete service structs satisfy these interfaces implicitly; no changes to the service
-implementations are needed beyond the interface declarations.
+Handlers depend on interfaces (defined in `internal/service/interfaces.go`) so they can
+be tested with fakes. The concrete service structs satisfy these implicitly.
 
 ---
 
@@ -193,6 +199,6 @@ implementations are needed beyond the interface declarations.
 ## Done When
 
 - `make build` produces `bin/trade-tracker-server`
-- All five services are reachable via `buf curl` against a running server
+- All services are reachable via `buf curl` against a running server
 - `go test ./...` passes including handler tests
 - Server wires up all Phase 2 services correctly at startup

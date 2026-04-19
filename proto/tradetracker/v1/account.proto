@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+import "google/protobuf/timestamp.proto";
+
+message Account {
+  string id = 1;
+  string broker = 2;
+  string account_number = 3;
+  string name = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+service AccountService {
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+}
+
+message ListAccountsRequest {}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}

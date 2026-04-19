@@ -1,9 +1,12 @@
 BINARY := bin/trade-tracker
 CMD     := ./cmd/trade-tracker
 
-.PHONY: all fmt vet lint test build clean
+.PHONY: all fmt vet lint test build clean proto
 
 all: build
+
+proto:
+	buf generate
 
 fmt:
 	gofmt -l -w .
