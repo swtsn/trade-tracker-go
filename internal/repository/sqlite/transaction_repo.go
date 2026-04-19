@@ -15,7 +15,7 @@ import (
 
 const transactionJoinSelect = `
 	SELECT
-		t.id, t.trade_id, t.broker_tx_id, t.broker, t.account_id, t.instrument_id,
+		t.id, t.trade_id, t.broker_tx_id, t.broker_order_id, t.broker, t.account_id, t.instrument_id,
 		t.action, t.quantity, t.fill_price, t.fees, t.executed_at, t.position_effect,
 		t.created_at,
 		i.id, i.symbol, i.asset_class, i.expiration, i.strike, i.option_type,
@@ -29,7 +29,7 @@ type transactionRepo struct {
 }
 
 // NewTransactionRepository creates a new transactionRepo backed by the given database.
-func NewTransactionRepository(db *sql.DB) *transactionRepo {
+func NewTransactionRepository(db *sql.DB) repository.TransactionRepository {
 	return &transactionRepo{db: db}
 }
 
@@ -39,10 +39,10 @@ func (r *transactionRepo) Create(ctx context.Context, tx *domain.Transaction) er
 	s := model.TransactionToStorage(*tx, time.Now())
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO transactions
-			(id, trade_id, broker_tx_id, broker, account_id, instrument_id, action,
+			(id, trade_id, broker_tx_id, broker_order_id, broker, account_id, instrument_id, action,
 			 quantity, fill_price, fees, executed_at, position_effect, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.TradeID, s.BrokerTxID, s.Broker, s.AccountID, s.InstrumentID, s.Action,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.TradeID, s.BrokerTxID, s.BrokerOrderID, s.Broker, s.AccountID, s.InstrumentID, s.Action,
 		s.Quantity, s.FillPrice, s.Fees, s.ExecutedAt, s.PositionEffect, s.CreatedAt,
 	)
 	if err != nil {
@@ -83,6 +83,42 @@ func (r *transactionRepo) ListByTrade(ctx context.Context, tradeID string) ([]do
 	}
 	defer func() { _ = rows.Close() }()
 	return scanTransactionRows(rows)
+}
+
+// ListByTradeIDs fetches transactions for a set of trade IDs in a single query,
+// returning them grouped by trade ID. Empty input returns an empty map.
+func (r *transactionRepo) ListByTradeIDs(ctx context.Context, tradeIDs []string) (map[string][]domain.Transaction, error) {
+	if len(tradeIDs) == 0 {
+		return map[string][]domain.Transaction{}, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(tradeIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]any, len(tradeIDs))
+	for i, id := range tradeIDs {
+		args[i] = id
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		transactionJoinSelect+` WHERE t.trade_id IN (`+placeholders+`) ORDER BY t.trade_id, t.executed_at`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list transactions by trade ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	txs, err := scanTransactionRows(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]domain.Transaction, len(tradeIDs))
+	for _, tx := range txs {
+		result[tx.TradeID] = append(result[tx.TradeID], tx)
+	}
+	return result, nil
 }
 
 // ListByAccountAndTimeRange retrieves all transactions for an account within a time range,

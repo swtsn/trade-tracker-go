@@ -26,11 +26,12 @@ func OpenRepos(path string) (*Repos, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open repos: %w", err)
 	}
+	txns := NewTransactionRepository(db)
 	return &Repos{
 		Accounts:      NewAccountRepository(db),
 		Instruments:   NewInstrumentRepository(db),
-		Transactions:  NewTransactionRepository(db),
-		Trades:        NewTradeRepository(db),
+		Transactions:  txns,
+		Trades:        NewTradeRepository(db, txns),
 		Positions:     NewPositionRepository(db),
 		Chains:        NewChainRepository(db),
 		ContractSpecs: NewContractSpecRepository(db),

@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 	"trade-tracker-go/internal/repository/sqlite/model"
 )
 
@@ -18,7 +19,7 @@ type chainRepo struct {
 }
 
 // NewChainRepository creates a new chainRepo backed by the given database.
-func NewChainRepository(db *sql.DB) *chainRepo {
+func NewChainRepository(db *sql.DB) repository.ChainRepository {
 	return &chainRepo{db: db}
 }
 

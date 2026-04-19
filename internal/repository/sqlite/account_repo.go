@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 )
 
 // accountRepo implements the AccountRepository interface.
@@ -16,7 +17,7 @@ type accountRepo struct {
 }
 
 // NewAccountRepository creates a new accountRepo backed by the given database.
-func NewAccountRepository(db *sql.DB) *accountRepo {
+func NewAccountRepository(db *sql.DB) repository.AccountRepository {
 	return &accountRepo{db: db}
 }
 

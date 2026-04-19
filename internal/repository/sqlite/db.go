@@ -73,6 +73,7 @@ func runMigrations(db *sql.DB) error {
 		{9, "migrations/009_restructure_positions.sql"},
 		{10, "migrations/010_positions_chain_id_unique.sql"},
 		{11, "migrations/011_positions_unique_trades_symbol.sql"},
+		{12, "migrations/012_transaction_broker_order_id.sql"},
 	}
 
 	for _, m := range migrations {

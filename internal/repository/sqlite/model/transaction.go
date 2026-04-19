@@ -13,6 +13,7 @@ type Transaction struct {
 	ID             string
 	TradeID        string
 	BrokerTxID     string
+	BrokerOrderID  string
 	Broker         string
 	AccountID      string
 	InstrumentID   string
@@ -36,7 +37,7 @@ type FullTransaction struct {
 func (r *FullTransaction) ScanDest() []any {
 	return append(
 		[]any{
-			&r.ID, &r.TradeID, &r.BrokerTxID, &r.Broker, &r.AccountID,
+			&r.ID, &r.TradeID, &r.BrokerTxID, &r.BrokerOrderID, &r.Broker, &r.AccountID,
 			&r.InstrumentID, &r.Action, &r.Quantity, &r.FillPrice,
 			&r.Fees, &r.ExecutedAt, &r.PositionEffect, &r.CreatedAt,
 		},
@@ -71,6 +72,7 @@ func (r FullTransaction) ToDomain() (domain.Transaction, error) {
 		ID:             r.ID,
 		TradeID:        r.TradeID,
 		BrokerTxID:     r.BrokerTxID,
+		BrokerOrderID:  r.BrokerOrderID,
 		Broker:         r.Broker,
 		AccountID:      r.AccountID,
 		Instrument:     inst,
@@ -91,6 +93,7 @@ func TransactionToStorage(tx domain.Transaction, now time.Time) Transaction {
 		ID:             tx.ID,
 		TradeID:        tx.TradeID,
 		BrokerTxID:     tx.BrokerTxID,
+		BrokerOrderID:  tx.BrokerOrderID,
 		Broker:         tx.Broker,
 		AccountID:      tx.AccountID,
 		InstrumentID:   tx.Instrument.InstrumentID(),
