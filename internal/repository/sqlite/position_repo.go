@@ -158,11 +158,13 @@ func (r *positionRepo) GetPositionByIDAndAccount(ctx context.Context, accountID,
 }
 
 // ListPositions returns positions for an account ordered by opened_at.
-// When openOnly is true, only positions where closed_at IS NULL are returned.
-func (r *positionRepo) ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error) {
+// openOnly and closedOnly are mutually exclusive; both false returns all positions.
+func (r *positionRepo) ListPositions(ctx context.Context, accountID string, openOnly, closedOnly bool) ([]domain.Position, error) {
 	q := positionSelect + ` WHERE account_id = ?`
 	if openOnly {
 		q += ` AND closed_at IS NULL`
+	} else if closedOnly {
+		q += ` AND closed_at IS NOT NULL`
 	}
 	q += ` ORDER BY opened_at`
 	rows, err := r.db.QueryContext(ctx, q, accountID)
@@ -171,7 +173,7 @@ func (r *positionRepo) ListPositions(ctx context.Context, accountID string, open
 	}
 	defer func() { _ = rows.Close() }()
 
-	var positions []domain.Position
+	positions := make([]domain.Position, 0)
 	for rows.Next() {
 		var row model.Position
 		if err := rows.Scan(row.ScanDest()...); err != nil {

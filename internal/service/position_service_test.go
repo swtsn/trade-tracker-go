@@ -444,7 +444,7 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	chainID3 := seedPositionChain(t, ctx, repos, acc, trade3ID)
 	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{buyTx}, chainID3))
 
-	open, err := repos.Positions.ListPositions(ctx, acc.ID, true)
+	open, err := repos.Positions.ListPositions(ctx, acc.ID, true, false)
 	require.NoError(t, err)
 	require.Len(t, open, 1, "only AAPL position should be open")
 	assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)

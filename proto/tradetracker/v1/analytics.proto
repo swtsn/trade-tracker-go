@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+import "google/protobuf/timestamp.proto";
+
+service AnalyticsService {
+  // GetAccountSummary returns aggregate P&L statistics for an account over a date range.
+  rpc GetAccountSummary(GetAccountSummaryRequest) returns (GetAccountSummaryResponse);
+}
+
+message GetAccountSummaryRequest {
+  // account_id is required.
+  string account_id = 1;
+  // from and to define the date range applied to lot closing and position close timestamps.
+  // Both are required; the handler returns InvalidArgument when either is absent.
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetAccountSummaryResponse {
+  // realized_pnl is a decimal string; net realized P&L for the period after fees.
+  string realized_pnl = 1;
+  // close_fees is a decimal string; total closing-transaction fees paid during the period.
+  string close_fees = 2;
+  // win_rate is a decimal string in [0, 1]; fraction of closed positions with positive P&L.
+  // Zero when no positions were closed in the period.
+  string win_rate = 3;
+  // positions_closed is the count of positions whose closed_at falls within the date range.
+  int32 positions_closed = 4;
+}

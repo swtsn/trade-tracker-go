@@ -10,6 +10,7 @@ import (
 type LinkType string
 
 const (
+	LinkTypeOpen       LinkType = "open" // originating trade event; never stored in chain_links
 	LinkTypeRoll       LinkType = "roll"
 	LinkTypeAssignment LinkType = "assignment"
 	LinkTypeExercise   LinkType = "exercise"
@@ -40,4 +41,29 @@ type ChainLink struct {
 	StrikeChange     decimal.Decimal // new - old (rolls only)
 	ExpirationChange int             // calendar days forward (rolls only)
 	CreditDebit      decimal.Decimal // net premium from the event
+}
+
+// ChainDetail is the enriched view of a chain returned by ChainService.GetChainDetail.
+// Events are ordered chronologically: the originating trade first, then each
+// ChainLink in sequence order.
+type ChainDetail struct {
+	Chain  *Chain
+	Events []ChainEvent
+	PnL    decimal.Decimal // net realized P&L; meaningful only when Chain.ClosedAt is non-nil
+}
+
+// ChainEvent represents one trade event within a chain's lifecycle.
+type ChainEvent struct {
+	TradeID     string
+	EventType   LinkType        // LinkTypeOpen for the originating trade; otherwise from ChainLink
+	CreditDebit decimal.Decimal // gross premium, fees excluded; positive = credit received; negative = debit paid
+	ExecutedAt  time.Time
+	Legs        []ChainEventLeg
+}
+
+// ChainEventLeg is one transaction leg within a chain event.
+type ChainEventLeg struct {
+	Action     Action
+	Instrument Instrument
+	Quantity   decimal.Decimal // lot size (always positive)
 }

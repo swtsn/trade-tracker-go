@@ -102,8 +102,8 @@ type PositionRepository interface {
 	// ownership at the SQL level rather than in the service layer.
 	GetPositionByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Position, error)
 	// ListPositions returns positions for an account ordered by opened_at.
-	// When openOnly is true, only positions where closed_at IS NULL are returned.
-	ListPositions(ctx context.Context, accountID string, openOnly bool) ([]domain.Position, error)
+	// openOnly and closedOnly are mutually exclusive; both false returns all positions.
+	ListPositions(ctx context.Context, accountID string, openOnly, closedOnly bool) ([]domain.Position, error)
 
 	// CreateLot inserts a new position lot.
 	CreateLot(ctx context.Context, lot *domain.PositionLot) error

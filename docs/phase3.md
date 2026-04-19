@@ -23,10 +23,10 @@ be exercised end-to-end with `buf curl` or a generated client.
 | buf toolchain setup | ✅ |
 | `account.proto` + handler | ✅ |
 | `import.proto` + handler | ✅ |
-| `trade.proto` + handler | 🔲 |
-| `position.proto` + handler | 🔲 |
-| `chain.proto` + handler | 🔲 |
-| `analytics.proto` + handler | 🔲 |
+| `trade.proto` + handler | ✅ |
+| `position.proto` + handler | ✅ |
+| `chain.proto` + handler | ✅ |
+| `analytics.proto` + handler | ✅ |
 | Server binary wiring | 🔲 |
 | End-to-end smoke test | 🔲 |
 

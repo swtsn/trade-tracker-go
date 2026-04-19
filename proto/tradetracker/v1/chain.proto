@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package tradetracker.v1;
+
+option go_package = "trade-tracker-go/gen/tradetracker/v1;tradetrackerpb";
+
+import "google/protobuf/timestamp.proto";
+import "tradetracker/v1/trade.proto";
+
+service ChainService {
+  // GetChain returns the full lifecycle detail for a chain, including per-trade leg data.
+  rpc GetChain(GetChainRequest) returns (GetChainResponse);
+}
+
+// LinkType mirrors domain.LinkType.
+enum LinkType {
+  LINK_TYPE_UNSPECIFIED = 0;
+  LINK_TYPE_OPEN = 1;       // originating trade
+  LINK_TYPE_ROLL = 2;
+  LINK_TYPE_ASSIGNMENT = 3;
+  LINK_TYPE_EXERCISE = 4;
+  LINK_TYPE_CLOSE = 5;
+}
+
+// ChainEventLeg is one transaction leg within a chain event.
+message ChainEventLeg {
+  Action action = 1;
+  Instrument instrument = 2;
+  // quantity is a decimal string representing lot size (always positive).
+  string quantity = 3;
+}
+
+// ChainEvent is one trade event in the chain's lifecycle.
+message ChainEvent {
+  string trade_id = 1;
+  LinkType event_type = 2;
+  // credit_debit is a decimal string; gross-of-fees premium for this trade event.
+  // Positive = credit received; negative = debit paid.
+  // Note: summing event credit_debit values will NOT reconcile with the chain realized_pnl,
+  // which is net-of-fees and computed independently at the SQL level.
+  string credit_debit = 3;
+  google.protobuf.Timestamp executed_at = 4;
+  repeated ChainEventLeg legs = 5;
+}
+
+// ChainDetail contains the full chain lifecycle including all trade events.
+message ChainDetail {
+  string id = 1;
+  string account_id = 2;
+  string underlying_symbol = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // closed_at is unset for open chains.
+  google.protobuf.Timestamp closed_at = 5;
+  // realized_pnl is a decimal string; meaningful only for closed chains.
+  string realized_pnl = 6;
+  // events are ordered chronologically: originating trade first, then each link in sequence order.
+  repeated ChainEvent events = 7;
+}
+
+message GetChainRequest {
+  // account_id is required and enforces ownership.
+  string account_id = 1;
+  string id = 2;
+}
+
+message GetChainResponse {
+  ChainDetail chain = 1;
+}

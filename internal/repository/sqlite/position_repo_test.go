@@ -248,7 +248,7 @@ func TestPositionRepository(t *testing.T) {
 		require.NoError(t, repos.Positions.CreatePosition(ctx, p1))
 		require.NoError(t, repos.Positions.CreatePosition(ctx, p2))
 
-		open, err := repos.Positions.ListPositions(ctx, acc.ID, true)
+		open, err := repos.Positions.ListPositions(ctx, acc.ID, true, false)
 		require.NoError(t, err)
 		assert.Len(t, open, 1)
 		assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)

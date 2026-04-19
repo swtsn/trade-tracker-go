@@ -54,7 +54,7 @@ type Transaction struct {
 	AccountID      string
 	Instrument     Instrument
 	Action         Action
-	Quantity       decimal.Decimal
+	Quantity       decimal.Decimal // always non-negative; direction is encoded in Action
 	FillPrice      decimal.Decimal
 	Fees           decimal.Decimal
 	ExecutedAt     time.Time
