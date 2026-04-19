@@ -71,12 +71,13 @@ func seedOptionInstrument(t *testing.T, ctx context.Context, repos *sqlite.Repos
 func seedTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, strategy domain.StrategyType, openedAt time.Time) *domain.Trade {
 	t.Helper()
 	trade := &domain.Trade{
-		ID:           uuid.New().String(),
-		AccountID:    acc.ID,
-		Broker:       acc.Broker,
-		StrategyType: strategy,
-		OpenedAt:     openedAt.UTC().Truncate(time.Second),
-		Notes:        "",
+		ID:               uuid.New().String(),
+		AccountID:        acc.ID,
+		Broker:           acc.Broker,
+		StrategyType:     strategy,
+		UnderlyingSymbol: "TEST",
+		OpenedAt:         openedAt.UTC().Truncate(time.Second),
+		Notes:            "",
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
 	return trade

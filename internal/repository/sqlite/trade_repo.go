@@ -27,9 +27,9 @@ func NewTradeRepository(db *sql.DB) *tradeRepo {
 func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 	s := model.TradeToStorage(*trade, time.Now())
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO trades (id, account_id, broker, strategy_type, opened_at, closed_at, notes, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.AccountID, s.Broker, s.StrategyType, s.OpenedAt, s.ClosedAt, s.Notes, s.CreatedAt,
+		`INSERT INTO trades (id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.AccountID, s.Broker, s.StrategyType, s.UnderlyingSymbol, s.OpenedAt, s.ClosedAt, s.Notes, s.CreatedAt,
 	)
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -45,9 +45,9 @@ func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, error) {
 	var s model.Trade
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, account_id, broker, strategy_type, opened_at, closed_at, notes, created_at
+		`SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
 		 FROM trades WHERE id = ?`, id,
-	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt)
+	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -94,7 +94,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	}
 
 	// Paginated query.
-	query := `SELECT id, account_id, broker, strategy_type, opened_at, closed_at, notes, created_at
+	query := `SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
 	          FROM trades ` + where + ` ORDER BY opened_at DESC`
 	if opts.Limit > 0 {
 		query += ` LIMIT ? OFFSET ?`
@@ -110,7 +110,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	var trades []domain.Trade
 	for rows.Next() {
 		var s model.Trade
-		if err := rows.Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan trade: %w", err)
 		}
 		trade, err := s.ToDomain()
