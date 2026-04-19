@@ -33,6 +33,7 @@ go.work.sum
 
 # builds
 bin/
+trade-tracker
 
 # local broker export files — may contain real account data
 data/
