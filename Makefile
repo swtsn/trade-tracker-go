@@ -1,7 +1,13 @@
-BINARY := bin/trade-tracker
+BINARY  := bin/trade-tracker
 CMD     := ./cmd/trade-tracker
+RELEASE := bin/trade-tracker-linux
 
-.PHONY: all fmt vet lint test build clean proto
+REMOTE_DIR   := ~/trade-tracker
+COMPOSE_FILE := ~/docker-compose.yml
+
+-include .env
+
+.PHONY: all fmt vet lint test build release-server deploy clean proto
 
 all: build
 
@@ -23,5 +29,12 @@ test: lint
 build: test
 	go build -o $(BINARY) $(CMD)
 
+release-server:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(RELEASE) $(CMD)
+
+deploy: release-server
+	rsync -az Dockerfile $(RELEASE) $(HOST):$(REMOTE_DIR)/
+	ssh $(HOST) "docker build -t trade-tracker $(REMOTE_DIR) && docker compose -f $(COMPOSE_FILE) up -d trade-tracker"
+
 clean:
-	rm -f $(BINARY)
+	rm -f $(BINARY) $(RELEASE)

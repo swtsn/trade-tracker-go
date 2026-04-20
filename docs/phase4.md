@@ -20,16 +20,19 @@ Ubuntu host, and fully exercised via `buf curl` with real broker CSV data.
 
 ## Scope
 
+> **Note:** Deployment target changed from systemd to Docker Compose on a remote host (`apollo`).
+> Systemd unit and install.sh replaced by `Dockerfile` + `deploy/compose-snippet.yml` + `make deploy`.
+
 | Component | Status |
 |---|---|
-| Server CLI (`kong`: `serve`, `migrate`, `version`) | 🔲 |
-| Graceful shutdown (SIGTERM drain) | 🔲 |
-| Structured startup logging (`slog`) | 🔲 |
-| `make run` local dev target | 🔲 |
-| `make release-server` (linux/amd64 cross-compile) | 🔲 |
-| `deploy/trade-tracker.service` systemd unit | 🔲 |
-| `deploy/install.sh` server setup script | 🔲 |
-| End-to-end manual verification (real CSV, real db) | 🔲 |
+| Server CLI (`kong` flags: `--addr`, `--db`) | ✅ (Phase 3) |
+| Graceful shutdown (SIGTERM drain) | ✅ (Phase 3) |
+| Structured startup logging (`log`) | ✅ (Phase 3) |
+| `make release-server` (linux/amd64 cross-compile) | ✅ |
+| `make deploy` (rsync + remote docker build + compose up) | ✅ |
+| `Dockerfile` (distroless static image) | ✅ |
+| `deploy/compose-snippet.yml` (one-time apollo setup) | ✅ |
+| End-to-end manual verification (real CSV, real db) | ✅ |
 
 ---
 

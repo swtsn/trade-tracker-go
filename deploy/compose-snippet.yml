@@ -1,0 +1,17 @@
+# Add the trade-tracker service and volume to ~/docker-compose.yml on apollo.
+# This is a one-time setup step.
+
+services:
+  trade-tracker:
+    image: trade-tracker
+    restart: unless-stopped
+    ports:
+      - "50051:50051"
+    volumes:
+      - trade-tracker-data:/var/lib/trade-tracker
+    environment:
+      TRADE_TRACKER_DB: /var/lib/trade-tracker/data.db
+      TRADE_TRACKER_ADDR: 0.0.0.0:50051
+
+volumes:
+  trade-tracker-data:
