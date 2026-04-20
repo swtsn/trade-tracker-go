@@ -86,8 +86,8 @@ func (v AnalyticsView) View() string {
 		fmt.Sprintf("Period: %s – %s", v.from.Format("2006-01-02"), v.to.Format("2006-01-02")),
 	)
 	return lipgloss.JoinVertical(lipgloss.Left,
-		period,
 		tableStyle.Render(v.table.View()),
+		period,
 	)
 }
 
@@ -156,7 +156,7 @@ func buildAnalyticsTable(rows []analyticsRow, w, h int) table.Model {
 		table.WithColumns(cols),
 		table.WithRows(tableRows),
 		table.WithFocused(true),
-		table.WithHeight(h-3),
+		table.WithHeight(h-5), // 1 extra line for period footer, 2 for tableStyle borders
 	)
 	t.SetStyles(defaultTableStyles())
 	return t

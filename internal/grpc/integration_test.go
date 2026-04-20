@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -35,7 +34,7 @@ const smokeCSV = "Date,Type,Sub Type,Action,Symbol,Instrument Type,Description,V
 	"2024-01-15T10:00:00-0500,Trade,Sell to Open,SELL_TO_OPEN,SPY   240119C00480000,Equity Option,Sold 1 SPY Call @ 1.50,150.00,1,1.50,0.00,-0.10,100,SPY,SPY,1/19/24,480,CALL,ORD001001,149.90,USD\n"
 
 // smokeStack bundles clients for all six services with the underlying repos for
-// direct account seeding (there is no CreateAccount RPC).
+// direct account seeding in the legacy flow and for CreateAccount verification.
 type smokeStack struct {
 	account   pb.AccountServiceClient
 	importer  pb.ImportServiceClient
@@ -71,7 +70,7 @@ func startSmokeServer(t *testing.T) *smokeStack {
 
 	// MaxRecvMsgSize matches production (main.go).
 	srv := grpc.NewServer(grpc.MaxRecvMsgSize(2 << 20))
-	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts))
+	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts))
 	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc))
 	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades))
 	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc))
@@ -106,26 +105,33 @@ func startSmokeServer(t *testing.T) *smokeStack {
 // TestIntegration_SmokeTest exercises all six gRPC services against a real in-memory
 // SQLite backend. It runs the canonical import → query flow end-to-end:
 //
-//  1. Seed an account directly via the repository (no CreateAccount RPC exists).
-//  2. AccountService  — ListAccounts / GetAccount.
-//  3. ImportService   — ImportTransactions with a minimal Tastytrade CSV (1 STO).
-//  4. TradeService    — ListTrades / GetTrade for the imported trade.
-//  5. PositionService — ListPositions / GetPosition (one open position after import).
-//  6. ChainService    — GetChain via the chain_id from the position.
-//  7. AnalyticsService — GetAccountSummary (zero realized P&L; position still open).
+//  1. AccountService  — CreateAccount / UpdateAccount / ListAccounts / GetAccount.
+//  2. ImportService   — ImportTransactions with a minimal Tastytrade CSV (1 STO).
+//  3. TradeService    — ListTrades / GetTrade for the imported trade.
+//  4. PositionService — ListPositions / GetPosition (one open position after import).
+//  5. ChainService    — GetChain via the chain_id from the position.
+//  6. AnalyticsService — GetAccountSummary (zero realized P&L; position still open).
 func TestIntegration_SmokeTest(t *testing.T) {
 	ctx := context.Background()
 	s := startSmokeServer(t)
 
-	// Seed an account. Accounts are provisioned out-of-band; there is no CreateAccount RPC.
-	acc := &domain.Account{
-		ID:            uuid.New().String(),
-		Broker:        "tastytrade",
-		AccountNumber: "SMOKE123",
-		Name:          "Smoke Test Account",
-		CreatedAt:     time.Now().UTC().Truncate(time.Second),
-	}
-	require.NoError(t, s.repos.Accounts.Create(ctx, acc))
+	// Create an account via the RPC (no longer seeded directly).
+	var accID string
+	t.Run("AccountService/CreateAccount", func(t *testing.T) {
+		resp, err := s.account.CreateAccount(ctx, &pb.CreateAccountRequest{
+			Broker:        "tastytrade",
+			AccountNumber: "SMOKE123",
+			Name:          "Smoke Test Account",
+		})
+		require.NoError(t, err)
+		assert.NotEmpty(t, resp.Account.Id)
+		assert.Equal(t, "tastytrade", resp.Account.Broker)
+		assert.Equal(t, "SMOKE123", resp.Account.AccountNumber)
+		assert.Equal(t, "Smoke Test Account", resp.Account.Name)
+		accID = resp.Account.Id
+	})
+	require.NotEmpty(t, accID, "CreateAccount must succeed before other subtests can run")
+	acc := &domain.Account{ID: accID, AccountNumber: "SMOKE123"}
 
 	// --- AccountService ---
 
@@ -142,6 +148,22 @@ func TestIntegration_SmokeTest(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, acc.ID, resp.Account.Id)
 		assert.Equal(t, "Smoke Test Account", resp.Account.Name)
+	})
+
+	t.Run("AccountService/UpdateAccount", func(t *testing.T) {
+		resp, err := s.account.UpdateAccount(ctx, &pb.UpdateAccountRequest{
+			Id:   acc.ID,
+			Name: "Renamed Account",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, acc.ID, resp.Account.Id)
+		assert.Equal(t, "Renamed Account", resp.Account.Name)
+
+		// Verify the rename persisted.
+		list, err := s.account.ListAccounts(ctx, &pb.ListAccountsRequest{})
+		require.NoError(t, err)
+		require.Len(t, list.Accounts, 1)
+		assert.Equal(t, "Renamed Account", list.Accounts[0].Name)
 	})
 
 	// --- ImportService ---

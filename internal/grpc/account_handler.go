@@ -2,7 +2,9 @@ package grpc
 
 import (
 	"context"
+	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -16,11 +18,12 @@ import (
 type AccountHandler struct {
 	pb.UnimplementedAccountServiceServer
 	accounts service.AccountReader
+	writer   service.AccountWriter
 }
 
-// NewAccountHandler creates an AccountHandler backed by the given reader.
-func NewAccountHandler(accounts service.AccountReader) *AccountHandler {
-	return &AccountHandler{accounts: accounts}
+// NewAccountHandler creates an AccountHandler backed by the given reader and writer.
+func NewAccountHandler(accounts service.AccountReader, writer service.AccountWriter) *AccountHandler {
+	return &AccountHandler{accounts: accounts, writer: writer}
 }
 
 func (h *AccountHandler) ListAccounts(ctx context.Context, req *pb.ListAccountsRequest) (*pb.ListAccountsResponse, error) {
@@ -50,6 +53,47 @@ func (h *AccountHandler) GetAccount(ctx context.Context, req *pb.GetAccountReque
 		return nil, status.Error(codes.NotFound, "account not found")
 	}
 	return &pb.GetAccountResponse{Account: accountToProto(a)}, nil
+}
+
+func (h *AccountHandler) CreateAccount(ctx context.Context, req *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
+	if req.Broker == "" {
+		return nil, status.Error(codes.InvalidArgument, "broker is required")
+	}
+	if req.AccountNumber == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_number is required")
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "generate id")
+	}
+	account := &domain.Account{
+		ID:            id.String(),
+		Broker:        req.Broker,
+		AccountNumber: req.AccountNumber,
+		Name:          req.Name,
+		CreatedAt:     time.Now().UTC(),
+	}
+	if err := h.writer.Create(ctx, account); err != nil {
+		return nil, toGRPCError(err)
+	}
+	return &pb.CreateAccountResponse{Account: accountToProto(account)}, nil
+}
+
+func (h *AccountHandler) UpdateAccount(ctx context.Context, req *pb.UpdateAccountRequest) (*pb.UpdateAccountResponse, error) {
+	if req.Id == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+	// Fetch before writing so the response is always consistent with what we wrote,
+	// regardless of concurrent renames from other clients.
+	a, err := h.accounts.GetByID(ctx, req.Id)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	if err := h.writer.UpdateName(ctx, req.Id, req.Name); err != nil {
+		return nil, toGRPCError(err)
+	}
+	a.Name = req.Name
+	return &pb.UpdateAccountResponse{Account: accountToProto(a)}, nil
 }
 
 func accountToProto(a *domain.Account) *pb.Account {

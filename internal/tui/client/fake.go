@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -28,6 +29,33 @@ func (f *Fake) ListAccounts(_ context.Context) ([]*pb.Account, error) {
 		return nil, f.Err
 	}
 	return f.Accounts, nil
+}
+
+func (f *Fake) CreateAccount(_ context.Context, broker, accountNumber, name string) (*pb.Account, error) {
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	a := &pb.Account{
+		Id:            fmt.Sprintf("fake-%d", len(f.Accounts)+1),
+		Broker:        broker,
+		AccountNumber: accountNumber,
+		Name:          name,
+	}
+	f.Accounts = append(f.Accounts, a)
+	return a, nil
+}
+
+func (f *Fake) UpdateAccount(_ context.Context, id, name string) (*pb.Account, error) {
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	for _, a := range f.Accounts {
+		if a.Id == id {
+			a.Name = name
+			return a, nil
+		}
+	}
+	return nil, status.Errorf(codes.NotFound, "account %q not found", id)
 }
 
 func (f *Fake) ListPositions(_ context.Context, accountID string, status pb.PositionStatus) ([]*pb.Position, error) {

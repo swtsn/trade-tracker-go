@@ -60,4 +60,22 @@ func TestAccountRepository(t *testing.T) {
 		err := r2.Accounts.Create(ctx, acc)
 		assert.ErrorIs(t, err, domain.ErrDuplicate)
 	})
+
+	t.Run("update name", func(t *testing.T) {
+		r2 := openTestDB(t)
+		acc := &domain.Account{ID: uuid.New().String(), Broker: "tastytrade", AccountNumber: "U1", Name: "Old", CreatedAt: time.Now().UTC().Truncate(time.Second)}
+		require.NoError(t, r2.Accounts.Create(ctx, acc))
+
+		require.NoError(t, r2.Accounts.UpdateName(ctx, acc.ID, "New"))
+
+		got, err := r2.Accounts.GetByID(ctx, acc.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "New", got.Name)
+	})
+
+	t.Run("update name not found", func(t *testing.T) {
+		r2 := openTestDB(t)
+		err := r2.Accounts.UpdateName(ctx, "nonexistent", "X")
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
 }

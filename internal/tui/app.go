@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,9 +22,11 @@ type accountsLoadedMsg struct {
 }
 
 var (
-	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4"))
 	tabInactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	tabSepStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	headerBGStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0"))
+	headerSepStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	helpStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
@@ -129,6 +132,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.importView = views.NewImportView(a.client)
 		a.propagateSize()
 		return a, a.loadActiveView()
+
+	case views.AccountsChangedMsg:
+		// A mutation (create/rename) completed; keep shared account list in sync
+		// so the header selector and other views reflect the change.
+		if msg.Accounts != nil {
+			a.state.Accounts = msg.Accounts
+		}
+		return a, a.delegateToActiveView(msg)
 	}
 
 	// Delegate to active view.
@@ -144,15 +155,19 @@ func (a *App) View() string {
 	}
 
 	header := a.renderHeader()
+	sep := headerSepStyle.Render(strings.Repeat("─", a.state.Width))
 	content := a.renderActiveView()
-	help := helpStyle.Render("[1-6] view  [Tab] next  [[] ]] account  q quit")
+	help := helpStyle.Render("[1-6] view  [Tab] next  [/] account  q quit")
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, content, help)
+	return lipgloss.JoinVertical(lipgloss.Left, header, sep, content, help)
 }
 
 func (a *App) renderHeader() string {
 	tabs := ""
 	for i := ViewID(0); i < viewCount; i++ {
+		if i > 0 {
+			tabs += tabSepStyle.Render("│")
+		}
 		label := fmt.Sprintf(" %d:%s ", i+1, viewLabels[i])
 		if i == a.activeView {
 			tabs += tabActiveStyle.Render(label)
@@ -279,8 +294,8 @@ func (a *App) activeViewCapturingInput() bool {
 }
 
 func (a *App) propagateSize() {
-	// Reserve 2 lines for header + help bar.
-	contentH := a.state.Height - 2
+	// Reserve 3 lines for header + separator + help bar.
+	contentH := a.state.Height - 3
 	if contentH < 1 {
 		contentH = 1
 	}

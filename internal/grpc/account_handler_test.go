@@ -36,6 +36,36 @@ func (f *fakeAccountReader) GetByID(_ context.Context, id string) (*domain.Accou
 	return nil, domain.ErrNotFound
 }
 
+// fakeAccountWriter is a test double for service.AccountWriter.
+type fakeAccountWriter struct {
+	created []domain.Account
+	err     error
+	names   map[string]string // id -> updated name
+}
+
+func (f *fakeAccountWriter) Create(_ context.Context, account *domain.Account) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.created = append(f.created, *account)
+	return nil
+}
+
+func (f *fakeAccountWriter) UpdateName(_ context.Context, id, name string) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.names == nil {
+		f.names = make(map[string]string)
+	}
+	f.names[id] = name
+	return nil
+}
+
+func newHandler(reader *fakeAccountReader) *grpchandler.AccountHandler {
+	return grpchandler.NewAccountHandler(reader, &fakeAccountWriter{})
+}
+
 func TestListAccounts(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	fake := &fakeAccountReader{
@@ -44,7 +74,7 @@ func TestListAccounts(t *testing.T) {
 			{ID: "a2", Broker: "schwab", AccountNumber: "67890", Name: "IRA", CreatedAt: now},
 		},
 	}
-	h := grpchandler.NewAccountHandler(fake)
+	h := newHandler(fake)
 
 	resp, err := h.ListAccounts(context.Background(), &pb.ListAccountsRequest{})
 	require.NoError(t, err)
@@ -60,7 +90,7 @@ func TestListAccounts(t *testing.T) {
 }
 
 func TestListAccounts_Empty(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{})
+	h := newHandler(&fakeAccountReader{})
 
 	resp, err := h.ListAccounts(context.Background(), &pb.ListAccountsRequest{})
 	require.NoError(t, err)
@@ -75,7 +105,7 @@ func TestGetAccount_Found(t *testing.T) {
 			{ID: "a1", Broker: "tastytrade", AccountNumber: "12345", Name: "Main", CreatedAt: now},
 		},
 	}
-	h := grpchandler.NewAccountHandler(fake)
+	h := newHandler(fake)
 
 	resp, err := h.GetAccount(context.Background(), &pb.GetAccountRequest{Id: "a1"})
 	require.NoError(t, err)
@@ -87,7 +117,7 @@ func TestGetAccount_Found(t *testing.T) {
 }
 
 func TestGetAccount_NotFound(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{})
+	h := newHandler(&fakeAccountReader{})
 
 	_, err := h.GetAccount(context.Background(), &pb.GetAccountRequest{Id: "missing"})
 	require.Error(t, err)
@@ -95,9 +125,91 @@ func TestGetAccount_NotFound(t *testing.T) {
 }
 
 func TestGetAccount_MissingID(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{})
+	h := newHandler(&fakeAccountReader{})
 
 	_, err := h.GetAccount(context.Background(), &pb.GetAccountRequest{})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCreateAccount(t *testing.T) {
+	reader := &fakeAccountReader{}
+	writer := &fakeAccountWriter{}
+	h := grpchandler.NewAccountHandler(reader, writer)
+
+	resp, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{
+		Broker:        "tastytrade",
+		AccountNumber: "12345",
+		Name:          "Main",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.Account.Id)
+	assert.Equal(t, "tastytrade", resp.Account.Broker)
+	assert.Equal(t, "12345", resp.Account.AccountNumber)
+	assert.Equal(t, "Main", resp.Account.Name)
+	assert.NotNil(t, resp.Account.CreatedAt)
+
+	require.Len(t, writer.created, 1)
+	assert.Equal(t, "tastytrade", writer.created[0].Broker)
+}
+
+func TestCreateAccount_MissingBroker(t *testing.T) {
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+
+	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{AccountNumber: "12345"})
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCreateAccount_MissingAccountNumber(t *testing.T) {
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+
+	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{Broker: "tastytrade"})
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCreateAccount_Duplicate(t *testing.T) {
+	writer := &fakeAccountWriter{err: domain.ErrDuplicate}
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer)
+
+	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{
+		Broker: "tastytrade", AccountNumber: "12345",
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
+func TestUpdateAccount(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	reader := &fakeAccountReader{
+		accounts: []domain.Account{
+			{ID: "a1", Broker: "tastytrade", AccountNumber: "12345", Name: "Old", CreatedAt: now},
+		},
+	}
+	writer := &fakeAccountWriter{}
+	h := grpchandler.NewAccountHandler(reader, writer)
+
+	resp, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{Id: "a1", Name: "New"})
+	require.NoError(t, err)
+	assert.Equal(t, "a1", resp.Account.Id)
+	assert.Equal(t, "New", resp.Account.Name)
+	assert.Equal(t, "New", writer.names["a1"])
+}
+
+func TestUpdateAccount_MissingID(t *testing.T) {
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+
+	_, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{})
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestUpdateAccount_NotFound(t *testing.T) {
+	writer := &fakeAccountWriter{err: domain.ErrNotFound}
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer)
+
+	_, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{Id: "missing", Name: "X"})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }

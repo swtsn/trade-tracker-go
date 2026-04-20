@@ -191,7 +191,7 @@ func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
 		table.WithColumns(cols),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(h-3),
+		table.WithHeight(h-5), // 1 extra line for filter bar, 2 for tableStyle borders
 	)
 	t.SetStyles(defaultTableStyles())
 	return t

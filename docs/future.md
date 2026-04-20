@@ -4,8 +4,7 @@ Items explicitly deferred from current phases. Revisit when the core system is s
 
 ## Next immediate steps
 
-- **Account lifecycle** — discuss how accounts should be created, edited, and deleted. Currently accounts can only be created implicitly via CSV import. Decide whether to add explicit account management (create/rename/archive) and where that lives (API, TUI, or CLI).
-- **TUI polish** — make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal. Revisit once the account lifecycle is settled so the account selector and views can be designed together.
+- **TUI polish** — make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
 
 ## Phase 1 / Data Model
 - **Corporate actions** — stock splits, mergers, spin-offs would require lot cost basis adjustments. No schema support yet.
@@ -14,6 +13,16 @@ Items explicitly deferred from current phases. Revisit when the core system is s
 - **Pairs positions** — modeling two-legged positions across different underlyings (e.g. long AAPL / short MSFT) would be interesting but is very far out. Requires cross-underlying position grouping, which the current model does not support.
 
 ## Phase 2 / Business Logic
+
+- **Trade purpose / playbook classification** — a user-defined label applied to a position or chain that captures *why* the trade was put on, orthogonal to the auto-detected strategy type. Examples: "income ladder", "long earnings straddle", "LEAPS hedge". Strategy type is derived mechanically from the leg structure; trade purpose is a higher-level intent that only the user knows.
+
+  Design notes:
+  - Purposes are user-created strings (initially free-form; possibly a managed list later). No fixed enum — what counts as a "purpose" will vary by user.
+  - The most natural attachment point is the **chain**, since a purpose typically describes a recurring pattern across rolls and adjustments. But a position-level label may also be useful for one-off trades that never grow into a chain.
+  - The UI flow (TUI initially): user selects a chain or position and assigns a purpose label inline, similar to how chain linking works today. Purposes should be quick to assign — ideally a single keypress on a pre-existing label or a short type-ahead input.
+  - Analytics wiring: `GetSymbolPerformance` and `GetStrategyPerformance` (Phase 7) should gain a `GetPurposePerformance` counterpart. The analytics dashboard needs a fourth panel (after account summary, per-symbol, per-strategy) breaking down P&L and win rate by purpose.
+  - Storage: a `purposes` reference table (id, name, created_at) and a `chain_purpose_id` FK on `chains` (nullable). A chain can have at most one purpose; a purpose can apply to many chains. Position-level labeling can be deferred until it's clear the chain-level attachment is insufficient.
+
 - **Strategy rule refactor** — the rule constructors in `internal/strategy/rules.go` are candidates for refactoring. No specific direction decided yet; revisit after more rules are in place and patterns emerge.
 - **Complex calendar strategies** — ratio calendars, straddle swaps, strangle swaps, and similar multi-leg time-spread structures are not yet classified. Add rules once the core calendar/diagonal shapes are validated in production.
 - **Classifier mutual-exclusion test** — the classifier's stated invariant is that rules must be mutually exclusive by construction, but this is only verified by inspection today. Investigate whether a property-based or exhaustive test can assert that no two rules match the same leg shape (e.g. using fuzzing or a synthetic corpus of known shapes).

@@ -74,7 +74,7 @@ func run() error {
 	// Limit transport-layer receive size to 2 MiB — above any handler's documented
 	// limit (ImportHandler caps CSV at 1 MiB) but well below gRPC's 4 MiB default.
 	srv := grpc.NewServer(grpc.MaxRecvMsgSize(2 << 20))
-	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts))
+	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts))
 	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc))
 	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades))
 	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc))

@@ -23,7 +23,6 @@ const (
 )
 
 // Account represents a trading account at a broker.
-// Accounts are created implicitly during CSV import; no mutation RPCs are exposed.
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -294,6 +293,208 @@ func (x *GetAccountResponse) GetAccount() *Account {
 	return nil
 }
 
+type CreateAccountRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Broker        string                 `protobuf:"bytes,1,opt,name=broker,proto3" json:"broker,omitempty"`
+	AccountNumber string                 `protobuf:"bytes,2,opt,name=account_number,json=accountNumber,proto3" json:"account_number,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"` // optional display name
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateAccountRequest) Reset() {
+	*x = CreateAccountRequest{}
+	mi := &file_tradetracker_v1_account_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateAccountRequest) ProtoMessage() {}
+
+func (x *CreateAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_account_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateAccountRequest.ProtoReflect.Descriptor instead.
+func (*CreateAccountRequest) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CreateAccountRequest) GetBroker() string {
+	if x != nil {
+		return x.Broker
+	}
+	return ""
+}
+
+func (x *CreateAccountRequest) GetAccountNumber() string {
+	if x != nil {
+		return x.AccountNumber
+	}
+	return ""
+}
+
+func (x *CreateAccountRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CreateAccountResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Account       *Account               `protobuf:"bytes,1,opt,name=account,proto3" json:"account,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateAccountResponse) Reset() {
+	*x = CreateAccountResponse{}
+	mi := &file_tradetracker_v1_account_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateAccountResponse) ProtoMessage() {}
+
+func (x *CreateAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_account_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateAccountResponse.ProtoReflect.Descriptor instead.
+func (*CreateAccountResponse) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CreateAccountResponse) GetAccount() *Account {
+	if x != nil {
+		return x.Account
+	}
+	return nil
+}
+
+// UpdateAccountRequest updates mutable account fields.
+// Only name may be changed; broker and account_number are immutable.
+type UpdateAccountRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateAccountRequest) Reset() {
+	*x = UpdateAccountRequest{}
+	mi := &file_tradetracker_v1_account_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateAccountRequest) ProtoMessage() {}
+
+func (x *UpdateAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_account_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateAccountRequest.ProtoReflect.Descriptor instead.
+func (*UpdateAccountRequest) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UpdateAccountRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateAccountRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type UpdateAccountResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Account       *Account               `protobuf:"bytes,1,opt,name=account,proto3" json:"account,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateAccountResponse) Reset() {
+	*x = UpdateAccountResponse{}
+	mi := &file_tradetracker_v1_account_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateAccountResponse) ProtoMessage() {}
+
+func (x *UpdateAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_account_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateAccountResponse.ProtoReflect.Descriptor instead.
+func (*UpdateAccountResponse) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_account_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *UpdateAccountResponse) GetAccount() *Account {
+	if x != nil {
+		return x.Account
+	}
+	return nil
+}
+
 var File_tradetracker_v1_account_proto protoreflect.FileDescriptor
 
 const file_tradetracker_v1_account_proto_rawDesc = "" +
@@ -316,11 +517,24 @@ const file_tradetracker_v1_account_proto_rawDesc = "" +
 	"\x11GetAccountRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
 	"\x12GetAccountResponse\x122\n" +
-	"\aaccount\x18\x01 \x01(\v2\x18.tradetracker.v1.AccountR\aaccount2\xc4\x01\n" +
+	"\aaccount\x18\x01 \x01(\v2\x18.tradetracker.v1.AccountR\aaccount\"i\n" +
+	"\x14CreateAccountRequest\x12\x16\n" +
+	"\x06broker\x18\x01 \x01(\tR\x06broker\x12%\n" +
+	"\x0eaccount_number\x18\x02 \x01(\tR\raccountNumber\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"K\n" +
+	"\x15CreateAccountResponse\x122\n" +
+	"\aaccount\x18\x01 \x01(\v2\x18.tradetracker.v1.AccountR\aaccount\":\n" +
+	"\x14UpdateAccountRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"K\n" +
+	"\x15UpdateAccountResponse\x122\n" +
+	"\aaccount\x18\x01 \x01(\v2\x18.tradetracker.v1.AccountR\aaccount2\x84\x03\n" +
 	"\x0eAccountService\x12[\n" +
 	"\fListAccounts\x12$.tradetracker.v1.ListAccountsRequest\x1a%.tradetracker.v1.ListAccountsResponse\x12U\n" +
 	"\n" +
-	"GetAccount\x12\".tradetracker.v1.GetAccountRequest\x1a#.tradetracker.v1.GetAccountResponseB5Z3trade-tracker-go/gen/tradetracker/v1;tradetrackerpbb\x06proto3"
+	"GetAccount\x12\".tradetracker.v1.GetAccountRequest\x1a#.tradetracker.v1.GetAccountResponse\x12^\n" +
+	"\rCreateAccount\x12%.tradetracker.v1.CreateAccountRequest\x1a&.tradetracker.v1.CreateAccountResponse\x12^\n" +
+	"\rUpdateAccount\x12%.tradetracker.v1.UpdateAccountRequest\x1a&.tradetracker.v1.UpdateAccountResponseB5Z3trade-tracker-go/gen/tradetracker/v1;tradetrackerpbb\x06proto3"
 
 var (
 	file_tradetracker_v1_account_proto_rawDescOnce sync.Once
@@ -334,28 +548,38 @@ func file_tradetracker_v1_account_proto_rawDescGZIP() []byte {
 	return file_tradetracker_v1_account_proto_rawDescData
 }
 
-var file_tradetracker_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_tradetracker_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_tradetracker_v1_account_proto_goTypes = []any{
 	(*Account)(nil),               // 0: tradetracker.v1.Account
 	(*ListAccountsRequest)(nil),   // 1: tradetracker.v1.ListAccountsRequest
 	(*ListAccountsResponse)(nil),  // 2: tradetracker.v1.ListAccountsResponse
 	(*GetAccountRequest)(nil),     // 3: tradetracker.v1.GetAccountRequest
 	(*GetAccountResponse)(nil),    // 4: tradetracker.v1.GetAccountResponse
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*CreateAccountRequest)(nil),  // 5: tradetracker.v1.CreateAccountRequest
+	(*CreateAccountResponse)(nil), // 6: tradetracker.v1.CreateAccountResponse
+	(*UpdateAccountRequest)(nil),  // 7: tradetracker.v1.UpdateAccountRequest
+	(*UpdateAccountResponse)(nil), // 8: tradetracker.v1.UpdateAccountResponse
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_tradetracker_v1_account_proto_depIdxs = []int32{
-	5, // 0: tradetracker.v1.Account.created_at:type_name -> google.protobuf.Timestamp
+	9, // 0: tradetracker.v1.Account.created_at:type_name -> google.protobuf.Timestamp
 	0, // 1: tradetracker.v1.ListAccountsResponse.accounts:type_name -> tradetracker.v1.Account
 	0, // 2: tradetracker.v1.GetAccountResponse.account:type_name -> tradetracker.v1.Account
-	1, // 3: tradetracker.v1.AccountService.ListAccounts:input_type -> tradetracker.v1.ListAccountsRequest
-	3, // 4: tradetracker.v1.AccountService.GetAccount:input_type -> tradetracker.v1.GetAccountRequest
-	2, // 5: tradetracker.v1.AccountService.ListAccounts:output_type -> tradetracker.v1.ListAccountsResponse
-	4, // 6: tradetracker.v1.AccountService.GetAccount:output_type -> tradetracker.v1.GetAccountResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0, // 3: tradetracker.v1.CreateAccountResponse.account:type_name -> tradetracker.v1.Account
+	0, // 4: tradetracker.v1.UpdateAccountResponse.account:type_name -> tradetracker.v1.Account
+	1, // 5: tradetracker.v1.AccountService.ListAccounts:input_type -> tradetracker.v1.ListAccountsRequest
+	3, // 6: tradetracker.v1.AccountService.GetAccount:input_type -> tradetracker.v1.GetAccountRequest
+	5, // 7: tradetracker.v1.AccountService.CreateAccount:input_type -> tradetracker.v1.CreateAccountRequest
+	7, // 8: tradetracker.v1.AccountService.UpdateAccount:input_type -> tradetracker.v1.UpdateAccountRequest
+	2, // 9: tradetracker.v1.AccountService.ListAccounts:output_type -> tradetracker.v1.ListAccountsResponse
+	4, // 10: tradetracker.v1.AccountService.GetAccount:output_type -> tradetracker.v1.GetAccountResponse
+	6, // 11: tradetracker.v1.AccountService.CreateAccount:output_type -> tradetracker.v1.CreateAccountResponse
+	8, // 12: tradetracker.v1.AccountService.UpdateAccount:output_type -> tradetracker.v1.UpdateAccountResponse
+	9, // [9:13] is the sub-list for method output_type
+	5, // [5:9] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_tradetracker_v1_account_proto_init() }
@@ -369,7 +593,7 @@ func file_tradetracker_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tradetracker_v1_account_proto_rawDesc), len(file_tradetracker_v1_account_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,54 +1,72 @@
-# Phase 6 — Post-MVP Analytics
+# Phase 6 — Verification & Tweaks
 
-Per-symbol and per-strategy P&L analytics, deferred from Phase 3 (MVP) to keep the initial
-server surface minimal.
+Connect the TUI to a live server with real data, exercise every view, and fix whatever
+is missing or broken. Items are added here as gaps are discovered.
+
+Prerequisite: Phase 5 (TUI implemented).
 
 ---
 
 ## Scope
 
-Two new RPCs on `AnalyticsService`, both already implemented in `internal/service/analytics_service.go`
-and exposed via the `Analytics` interface. Phase 6 only adds the proto definitions and handlers;
-no service or repository changes are expected.
-
-| RPC | Service method |
+| Item | Status |
 |---|---|
-| `GetSymbolPerformance` | `AnalyticsService.GetSymbolPnL` |
-| `GetStrategyPerformance` | `AnalyticsService.GetStrategyPerformance` |
+| Account management (create, rename, delete) | 🔲 |
 
 ---
 
-## RPCs
+## Account Management
 
-### GetSymbolPerformance
+### Current state
 
-```
-rpc GetSymbolPerformance(GetSymbolPerformanceRequest) returns (GetSymbolPerformanceResponse);
-```
+Accounts are created **implicitly** during CSV import — no explicit creation RPC exists.
+The `AccountRepository` already has a `Create` method, but it is not wired to any service
+or proto RPC. There is no rename or delete at any layer.
 
-Request: `account_id`, `symbol`, `from`, `to`
-Response: `realized_pnl` (decimal string)
+The proto comment reads: *"Accounts are created implicitly during CSV import; no mutation
+RPCs are exposed."* This needs to change.
 
-Maps to `Analytics.GetSymbolPnL`. Returns net realized P&L for one underlying symbol
-over a date range (e.g. all SPY trades closed between Jan and Apr).
+### What's missing
 
-### GetStrategyPerformance
+**Proto / gRPC (`account.proto` + `AccountHandler`)**
 
-```
-rpc GetStrategyPerformance(GetStrategyPerformanceRequest) returns (GetStrategyPerformanceResponse);
-```
+| RPC | Notes |
+|---|---|
+| `CreateAccount` | Explicit account creation; broker + account_number + optional name |
+| `UpdateAccount` | Rename only (name field); broker and account_number are immutable |
+| `DeleteAccount` | Delete account and all associated data, or reject if data exists |
 
-Request: `account_id`, `from`, `to`
-Response: repeated `StrategyStats` — one entry per strategy type
+**Service layer**
 
-Maps to `Analytics.GetStrategyPerformance`. Each `StrategyStats` entry includes:
-`strategy_type`, `count`, `win_rate`, `average_pnl`, `total_pnl` (all decimal strings).
+`AccountReader` in `internal/service/interfaces.go` is read-only. Either extend it to
+`AccountService` or introduce a separate `AccountWriter` interface. The repo already
+satisfies `Create`; `Update` (rename) and `Delete` need to be added to
+`repository.AccountRepository` and `sqlite.accountRepo`.
+
+**Delete semantics**: decide before implementing —
+- *Reject if data exists*: simpler, safer. Return `FailedPrecondition` if any trades,
+  positions, or transactions reference the account.
+- *Cascade delete*: removes all associated data. Destructive; needs explicit confirmation
+  in the TUI.
+
+**TUI**
+
+The accounts view (`internal/tui/views/accounts.go`) currently only lists accounts for
+selection. It needs:
+- `n` keybinding — create new account (inline form: broker, account number, name)
+- `r` keybinding — rename selected account
+- `d` / `D` keybinding — delete selected account (confirm prompt before calling RPC)
+
+---
+
+## Future / Deferred
+
+- **`UNIQUE(broker, account_number)` constraint** — the `accounts` table currently has only a PK on `id`. Two creates with different UUIDs but the same broker+account_number both succeed. Add a migration with `UNIQUE(broker, account_number)` and map that SQLite constraint to `domain.ErrDuplicate` in `isUniqueConstraint`.
 
 ---
 
 ## Done When
 
-- `analytics.proto` extended with both RPCs
-- `AnalyticsHandler` implements both new RPCs (injected interface already satisfies them)
-- Handler tests cover response mapping and error paths
 - `make test` passes
+- All views exercise real data without crashes or layout issues
+- Each item in the scope table is checked off

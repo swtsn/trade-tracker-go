@@ -17,14 +17,14 @@ Prerequisite: Phase 4 (server is deployed and manually verified on real data).
 
 | Component | Status |
 |---|---|
-| TUI binary + server connection config | 🔲 |
-| Account selector (startup screen) | 🔲 |
-| Open positions view | 🔲 |
-| Historic positions view | 🔲 |
-| Position detail / chain drill-down | 🔲 |
-| Trades audit view | 🔲 |
-| Analytics dashboard | 🔲 |
-| CSV import flow | 🔲 |
+| TUI binary + server connection config | ✅ |
+| Account selector (startup screen) | ✅ |
+| Open positions view | ✅ |
+| Historic positions view | ✅ |
+| Position detail / chain drill-down | ✅ |
+| Trades audit view | ✅ |
+| Analytics dashboard | ✅ |
+| CSV import flow | ✅ |
 
 ---
 

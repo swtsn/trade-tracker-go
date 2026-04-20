@@ -72,6 +72,24 @@ func (r *accountRepo) List(ctx context.Context) ([]domain.Account, error) {
 	return accounts, rows.Err()
 }
 
+// UpdateName sets the display name for an existing account.
+// Returns domain.ErrNotFound if no account with that ID exists.
+func (r *accountRepo) UpdateName(ctx context.Context, id, name string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE accounts SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return fmt.Errorf("update account name: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update account name rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: account %s", domain.ErrNotFound, id)
+	}
+	return nil
+}
+
 // scanAccount scans a single account row into a domain.Account.
 // Returns domain.ErrNotFound if the row contains no data.
 func scanAccount(row *sql.Row) (*domain.Account, error) {
