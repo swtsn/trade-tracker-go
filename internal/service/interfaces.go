@@ -17,6 +17,14 @@ type AccountReader interface {
 	List(ctx context.Context) ([]domain.Account, error)
 }
 
+// AccountWriter mutates account data.
+// Used by the account gRPC handler for create and update operations.
+// *sqlite.accountRepo satisfies this interface via repos.Accounts.
+type AccountWriter interface {
+	Create(ctx context.Context, account *domain.Account) error
+	UpdateName(ctx context.Context, id, name string) error
+}
+
 // StrategyClassifier classifies a set of transaction legs into a strategy type.
 // *strategy.Classifier satisfies this interface.
 type StrategyClassifier interface {

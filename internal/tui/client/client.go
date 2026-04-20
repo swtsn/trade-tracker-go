@@ -43,6 +43,8 @@ type ImportEvent struct {
 // All methods accept a context so callers can cancel in-flight requests.
 type Client interface {
 	ListAccounts(ctx context.Context) ([]*pb.Account, error)
+	CreateAccount(ctx context.Context, broker, accountNumber, name string) (*pb.Account, error)
+	UpdateAccount(ctx context.Context, id, name string) (*pb.Account, error)
 	ListPositions(ctx context.Context, accountID string, status pb.PositionStatus) ([]*pb.Position, error)
 	GetPosition(ctx context.Context, accountID, positionID string) (*pb.Position, error)
 	GetChain(ctx context.Context, accountID, chainID string) (*pb.ChainDetail, error)
@@ -90,6 +92,29 @@ func (c *grpcClient) ListAccounts(ctx context.Context) ([]*pb.Account, error) {
 		return nil, err
 	}
 	return resp.Accounts, nil
+}
+
+func (c *grpcClient) CreateAccount(ctx context.Context, broker, accountNumber, name string) (*pb.Account, error) {
+	resp, err := c.accounts.CreateAccount(ctx, &pb.CreateAccountRequest{
+		Broker:        broker,
+		AccountNumber: accountNumber,
+		Name:          name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Account, nil
+}
+
+func (c *grpcClient) UpdateAccount(ctx context.Context, id, name string) (*pb.Account, error) {
+	resp, err := c.accounts.UpdateAccount(ctx, &pb.UpdateAccountRequest{
+		Id:   id,
+		Name: name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Account, nil
 }
 
 func (c *grpcClient) ListPositions(ctx context.Context, accountID string, status pb.PositionStatus) ([]*pb.Position, error) {

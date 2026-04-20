@@ -26,6 +26,9 @@ type AccountRepository interface {
 	Create(ctx context.Context, account *domain.Account) error
 	GetByID(ctx context.Context, id string) (*domain.Account, error)
 	List(ctx context.Context) ([]domain.Account, error)
+	// UpdateName sets the display name for an existing account.
+	// Returns domain.ErrNotFound if the account does not exist.
+	UpdateName(ctx context.Context, id, name string) error
 }
 
 // InstrumentRepository provides access to instrument data.

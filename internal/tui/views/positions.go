@@ -138,7 +138,7 @@ func buildPositionsTable(positions []*pb.Position, w, h int, showOpen bool) tabl
 		table.WithColumns(cols),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(h-2),
+		table.WithHeight(h-4),
 	)
 	t.SetStyles(defaultTableStyles())
 	return t
