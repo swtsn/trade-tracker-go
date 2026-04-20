@@ -10,7 +10,8 @@
       "Bash(golangci-lint:*)",
       "Bash(awk -F',' '{print $7}')",
       "Bash(buf:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git add:*)"
     ]
   }
 }
