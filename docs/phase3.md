@@ -27,8 +27,8 @@ be exercised end-to-end with `buf curl` or a generated client.
 | `position.proto` + handler | ✅ |
 | `chain.proto` + handler | ✅ |
 | `analytics.proto` + handler | ✅ |
-| Server binary wiring | 🔲 |
-| End-to-end smoke test | 🔲 |
+| Server binary wiring | ✅ |
+| End-to-end smoke test | ✅ |
 
 ---
 

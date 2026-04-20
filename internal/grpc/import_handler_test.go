@@ -62,6 +62,8 @@ const tastytradeHeader = "Date,Type,Sub Type,Action,Symbol,Instrument Type,Descr
 // converts into one domain.Transaction (equity option, sell-to-open).
 // Column count (21) matches numCols in the tastytrade parser.
 // Action value (SELL_TO_OPEN) matches what mapAction accepts.
+// NOTE: this CSV data is also duplicated in integration_test.go as smokeCSV.
+// If you change the format here, update that copy too.
 const minimalTastytradeCSV = tastytradeHeader +
 	"2024-01-15T10:00:00-0500,Trade,Sell to Open,SELL_TO_OPEN,SPY   240119C00480000,Equity Option,Sold 1 SPY Call @ 1.50,150.00,1,1.50,0.00,-0.10,100,SPY,SPY,1/19/24,480,CALL,ORD001001,149.90,USD\n"
 
