@@ -2,6 +2,11 @@
 
 Items explicitly deferred from current phases. Revisit when the core system is stable.
 
+## Next immediate steps
+
+- **Account lifecycle** — discuss how accounts should be created, edited, and deleted. Currently accounts can only be created implicitly via CSV import. Decide whether to add explicit account management (create/rename/archive) and where that lives (API, TUI, or CLI).
+- **TUI polish** — make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal. Revisit once the account lifecycle is settled so the account selector and views can be designed together.
+
 ## Phase 1 / Data Model
 - **Corporate actions** — stock splits, mergers, spin-offs would require lot cost basis adjustments. No schema support yet.
 - **Crypto** — asset class placeholder exists but no broker parsers or instrument handling.

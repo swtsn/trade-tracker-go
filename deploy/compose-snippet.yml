@@ -6,7 +6,7 @@ services:
     image: trade-tracker
     restart: unless-stopped
     ports:
-      - "50051:50051"
+      - 10000:50051
     volumes:
       - trade-tracker-data:/var/lib/trade-tracker
     environment:

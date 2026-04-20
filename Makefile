@@ -2,12 +2,15 @@ BINARY  := bin/trade-tracker
 CMD     := ./cmd/trade-tracker
 RELEASE := bin/trade-tracker-linux
 
+TUI_BINARY := bin/trade-tracker-tui
+TUI_CMD    := ./cmd/trade-tracker-tui
+
 REMOTE_DIR   := ~/trade-tracker
 COMPOSE_FILE := ~/docker-compose.yml
 
 -include .env
 
-.PHONY: all fmt vet lint test build release-server deploy clean proto
+.PHONY: all fmt vet lint test build build-server build-tui release-server deploy clean proto
 
 all: build
 
@@ -28,6 +31,13 @@ test: lint
 
 build: test
 	go build -o $(BINARY) $(CMD)
+	go build -o $(TUI_BINARY) $(TUI_CMD)
+
+build-server: test
+	go build -o $(BINARY) $(CMD)
+
+build-tui: test
+	go build -o $(TUI_BINARY) $(TUI_CMD)
 
 release-server:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(RELEASE) $(CMD)
@@ -37,4 +47,4 @@ deploy: release-server
 	ssh $(HOST) "docker build -t trade-tracker $(REMOTE_DIR) && docker compose -f $(COMPOSE_FILE) up -d trade-tracker"
 
 clean:
-	rm -f $(BINARY) $(RELEASE)
+	rm -f $(BINARY) $(RELEASE) $(TUI_BINARY)
