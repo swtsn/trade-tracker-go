@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,11 +16,12 @@ import (
 type PositionHandler struct {
 	pb.UnimplementedPositionServiceServer
 	positions service.PositionReader
+	logger    *slog.Logger
 }
 
 // NewPositionHandler creates a PositionHandler backed by the given reader.
-func NewPositionHandler(positions service.PositionReader) *PositionHandler {
-	return &PositionHandler{positions: positions}
+func NewPositionHandler(positions service.PositionReader, logger *slog.Logger) *PositionHandler {
+	return &PositionHandler{positions: positions, logger: logger}
 }
 
 func (h *PositionHandler) ListPositions(ctx context.Context, req *pb.ListPositionsRequest) (*pb.ListPositionsResponse, error) {
@@ -37,7 +39,7 @@ func (h *PositionHandler) ListPositions(ctx context.Context, req *pb.ListPositio
 
 	positions, err := h.positions.ListPositions(ctx, req.AccountId, openOnly, closedOnly)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 
 	resp := &pb.ListPositionsResponse{
@@ -59,7 +61,7 @@ func (h *PositionHandler) GetPosition(ctx context.Context, req *pb.GetPositionRe
 
 	pos, err := h.positions.GetPosition(ctx, req.AccountId, req.Id)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	return &pb.GetPositionResponse{Position: positionToProto(pos)}, nil
 }

@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,11 +14,12 @@ import (
 type AnalyticsHandler struct {
 	pb.UnimplementedAnalyticsServiceServer
 	analytics service.Analytics
+	logger    *slog.Logger
 }
 
-// NewAnalyticsHandler creates an AnalyticsHandler backed by the given analytics service.
-func NewAnalyticsHandler(analytics service.Analytics) *AnalyticsHandler {
-	return &AnalyticsHandler{analytics: analytics}
+// NewAnalyticsHandler creates an AnalyticsHandler backed by the given reader.
+func NewAnalyticsHandler(analytics service.Analytics, logger *slog.Logger) *AnalyticsHandler {
+	return &AnalyticsHandler{analytics: analytics, logger: logger}
 }
 
 func (h *AnalyticsHandler) GetAccountSummary(ctx context.Context, req *pb.GetAccountSummaryRequest) (*pb.GetAccountSummaryResponse, error) {
@@ -38,7 +40,7 @@ func (h *AnalyticsHandler) GetAccountSummary(ctx context.Context, req *pb.GetAcc
 
 	summary, err := h.analytics.GetPnLSummary(ctx, req.AccountId, from, to)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 
 	return &pb.GetAccountSummaryResponse{
@@ -68,7 +70,7 @@ func (h *AnalyticsHandler) GetSymbolPerformance(ctx context.Context, req *pb.Get
 
 	pnl, err := h.analytics.GetSymbolPnL(ctx, req.AccountId, req.Symbol, req.From.AsTime(), req.To.AsTime())
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 
 	return &pb.GetSymbolPerformanceResponse{RealizedPnl: pnl.String()}, nil
@@ -90,7 +92,7 @@ func (h *AnalyticsHandler) GetStrategyPerformance(ctx context.Context, req *pb.G
 
 	stats, err := h.analytics.GetStrategyPerformance(ctx, req.AccountId, req.From.AsTime(), req.To.AsTime())
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 
 	resp := &pb.GetStrategyPerformanceResponse{

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -41,6 +41,8 @@ func main() {
 }
 
 func run() error {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	// Open DB and run migrations.
 	repos, err := sqlite.OpenRepos(cli.DB)
 	if err != nil {
@@ -48,13 +50,13 @@ func run() error {
 	}
 	defer func() {
 		if cerr := repos.Close(); cerr != nil {
-			log.Printf("close db: %v", cerr)
+			logger.Warn("close db", "err", cerr)
 		}
 	}()
 
 	// Wire services.
 	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
-	positionSvc := service.NewPositionService(repos.Positions)
+	positionSvc := service.NewPositionService(repos.Positions, logger)
 	importSvc := service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
@@ -74,12 +76,12 @@ func run() error {
 	// Limit transport-layer receive size to 2 MiB — above any handler's documented
 	// limit (ImportHandler caps CSV at 1 MiB) but well below gRPC's 4 MiB default.
 	srv := grpc.NewServer(grpc.MaxRecvMsgSize(2 << 20))
-	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts))
-	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc))
-	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades))
-	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc))
-	pb.RegisterChainServiceServer(srv, grpchandler.NewChainHandler(chainSvc))
-	pb.RegisterAnalyticsServiceServer(srv, grpchandler.NewAnalyticsHandler(analyticsSvc))
+	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts, logger))
+	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc, logger))
+	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades, logger))
+	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc, logger))
+	pb.RegisterChainServiceServer(srv, grpchandler.NewChainHandler(chainSvc, logger))
+	pb.RegisterAnalyticsServiceServer(srv, grpchandler.NewAnalyticsHandler(analyticsSvc, logger))
 
 	// Register signal handler before binding the port so no signal is missed.
 	stop := make(chan os.Signal, 1)
@@ -92,7 +94,7 @@ func run() error {
 
 	go func() {
 		<-stop
-		log.Println("shutting down")
+		logger.Info("shutting down")
 		ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		done := make(chan struct{})
@@ -100,11 +102,11 @@ func run() error {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			log.Println("drain timeout exceeded; forcing stop")
+			logger.Warn("drain timeout exceeded; forcing stop")
 			srv.Stop()
 		}
 	}()
 
-	log.Printf("serving on %s", cli.Addr)
+	logger.Info("serving", "addr", cli.Addr)
 	return srv.Serve(lis)
 }

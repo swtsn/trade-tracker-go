@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,11 +16,12 @@ import (
 type ChainHandler struct {
 	pb.UnimplementedChainServiceServer
 	chains service.ChainReader
+	logger *slog.Logger
 }
 
 // NewChainHandler creates a ChainHandler backed by the given reader.
-func NewChainHandler(chains service.ChainReader) *ChainHandler {
-	return &ChainHandler{chains: chains}
+func NewChainHandler(chains service.ChainReader, logger *slog.Logger) *ChainHandler {
+	return &ChainHandler{chains: chains, logger: logger}
 }
 
 func (h *ChainHandler) GetChain(ctx context.Context, req *pb.GetChainRequest) (*pb.GetChainResponse, error) {
@@ -32,7 +34,7 @@ func (h *ChainHandler) GetChain(ctx context.Context, req *pb.GetChainRequest) (*
 
 	detail, err := h.chains.GetChainDetail(ctx, req.AccountId, req.Id)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	return &pb.GetChainResponse{Chain: chainDetailToProto(detail)}, nil
 }

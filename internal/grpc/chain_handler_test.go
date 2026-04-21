@@ -72,14 +72,14 @@ func makeTestChainDetail(chainID, accountID string) *domain.ChainDetail {
 }
 
 func TestGetChain_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewChainHandler(&fakeChainReader{})
+	h := grpchandler.NewChainHandler(&fakeChainReader{}, testLogger)
 	_, err := h.GetChain(context.Background(), &pb.GetChainRequest{Id: "chain1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetChain_RequiresID(t *testing.T) {
-	h := grpchandler.NewChainHandler(&fakeChainReader{})
+	h := grpchandler.NewChainHandler(&fakeChainReader{}, testLogger)
 	_, err := h.GetChain(context.Background(), &pb.GetChainRequest{AccountId: "acc1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -87,7 +87,7 @@ func TestGetChain_RequiresID(t *testing.T) {
 
 func TestGetChain_Found(t *testing.T) {
 	detail := makeTestChainDetail("chain1", "acc1")
-	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail})
+	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail}, testLogger)
 
 	resp, err := h.GetChain(context.Background(), &pb.GetChainRequest{AccountId: "acc1", Id: "chain1"})
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestGetChain_ClosedChain(t *testing.T) {
 	closedAt := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
 	detail.Chain.ClosedAt = &closedAt
 
-	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail})
+	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail}, testLogger)
 
 	resp, err := h.GetChain(context.Background(), &pb.GetChainRequest{AccountId: "acc1", Id: "chain1"})
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestGetChain_ClosedChain(t *testing.T) {
 }
 
 func TestGetChain_NotFound(t *testing.T) {
-	h := grpchandler.NewChainHandler(&fakeChainReader{})
+	h := grpchandler.NewChainHandler(&fakeChainReader{}, testLogger)
 	_, err := h.GetChain(context.Background(), &pb.GetChainRequest{AccountId: "acc1", Id: "missing"})
 	require.Error(t, err)
 	assert.Equal(t, codes.NotFound, status.Code(err))
@@ -135,7 +135,7 @@ func TestGetChain_NotFound(t *testing.T) {
 
 func TestGetChain_WrongAccount(t *testing.T) {
 	detail := makeTestChainDetail("chain1", "acc1")
-	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail})
+	h := grpchandler.NewChainHandler(&fakeChainReader{detail: detail}, testLogger)
 
 	_, err := h.GetChain(context.Background(), &pb.GetChainRequest{AccountId: "other", Id: "chain1"})
 	require.Error(t, err)

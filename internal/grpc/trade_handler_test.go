@@ -71,14 +71,14 @@ func makeTestTrade(id, accountID, symbol string, closedAt *time.Time) domain.Tra
 }
 
 func TestListTrades_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	_, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestListTrades_MutuallyExclusiveFilters(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	_, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{
 		AccountId:  "acc1",
 		OpenOnly:   true,
@@ -96,7 +96,7 @@ func TestListTrades_ReturnsTrades(t *testing.T) {
 			makeTestTrade("t2", "acc1", "AAPL", &now),
 		},
 	}
-	h := grpchandler.NewTradeHandler(fake)
+	h := grpchandler.NewTradeHandler(fake, testLogger)
 
 	resp, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{AccountId: "acc1"})
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestListTrades_OpenOnlyFilter(t *testing.T) {
 			makeTestTrade("closed1", "acc1", "SPY", &now),
 		},
 	}
-	h := grpchandler.NewTradeHandler(fake)
+	h := grpchandler.NewTradeHandler(fake, testLogger)
 
 	resp, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{
 		AccountId: "acc1",
@@ -132,7 +132,7 @@ func TestListTrades_SymbolFilter(t *testing.T) {
 			makeTestTrade("t2", "acc1", "AAPL", nil),
 		},
 	}
-	h := grpchandler.NewTradeHandler(fake)
+	h := grpchandler.NewTradeHandler(fake, testLogger)
 
 	resp, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{
 		AccountId: "acc1",
@@ -144,7 +144,7 @@ func TestListTrades_SymbolFilter(t *testing.T) {
 }
 
 func TestListTrades_Empty(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	resp, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{AccountId: "acc1"})
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Trades)
@@ -152,14 +152,14 @@ func TestListTrades_Empty(t *testing.T) {
 }
 
 func TestGetTrade_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	_, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{Id: "t1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetTrade_RequiresID(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	_, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{AccountId: "acc1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -200,7 +200,7 @@ func TestGetTrade_Found(t *testing.T) {
 			},
 		},
 	}
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{trades: []domain.Trade{trade}})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{trades: []domain.Trade{trade}}, testLogger)
 
 	resp, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{AccountId: "acc1", Id: "t1"})
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestGetTrade_Found(t *testing.T) {
 }
 
 func TestGetTrade_NotFound(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
 	_, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{AccountId: "acc1", Id: "missing"})
 	require.Error(t, err)
 	assert.Equal(t, codes.NotFound, status.Code(err))
@@ -222,7 +222,7 @@ func TestGetTrade_NotFound(t *testing.T) {
 
 func TestGetTrade_WrongAccount(t *testing.T) {
 	trade := makeTestTrade("t1", "acc1", "SPY", nil)
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{trades: []domain.Trade{trade}})
+	h := grpchandler.NewTradeHandler(&fakeTradeReader{trades: []domain.Trade{trade}}, testLogger)
 
 	_, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{AccountId: "other-acc", Id: "t1"})
 	require.Error(t, err)

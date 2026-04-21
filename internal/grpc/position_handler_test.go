@@ -72,7 +72,7 @@ func makeTestPosition(id, accountID, chainID string, closedAt *time.Time) domain
 }
 
 func TestListPositions_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewPositionHandler(&fakePositionReader{})
+	h := grpchandler.NewPositionHandler(&fakePositionReader{}, testLogger)
 	_, err := h.ListPositions(context.Background(), &pb.ListPositionsRequest{})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -86,7 +86,7 @@ func TestListPositions_ReturnsAll(t *testing.T) {
 			makeTestPosition("p2", "acc1", "chain2", &now),
 		},
 	}
-	h := grpchandler.NewPositionHandler(fake)
+	h := grpchandler.NewPositionHandler(fake, testLogger)
 
 	resp, err := h.ListPositions(context.Background(), &pb.ListPositionsRequest{AccountId: "acc1"})
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestListPositions_OpenFilter(t *testing.T) {
 			makeTestPosition("closed1", "acc1", "chain2", &now),
 		},
 	}
-	h := grpchandler.NewPositionHandler(fake)
+	h := grpchandler.NewPositionHandler(fake, testLogger)
 
 	resp, err := h.ListPositions(context.Background(), &pb.ListPositionsRequest{
 		AccountId: "acc1",
@@ -122,7 +122,7 @@ func TestListPositions_ClosedFilter(t *testing.T) {
 			makeTestPosition("closed1", "acc1", "chain2", &now),
 		},
 	}
-	h := grpchandler.NewPositionHandler(fake)
+	h := grpchandler.NewPositionHandler(fake, testLogger)
 
 	resp, err := h.ListPositions(context.Background(), &pb.ListPositionsRequest{
 		AccountId: "acc1",
@@ -136,7 +136,7 @@ func TestListPositions_ClosedFilter(t *testing.T) {
 }
 
 func TestListPositions_Empty(t *testing.T) {
-	h := grpchandler.NewPositionHandler(&fakePositionReader{})
+	h := grpchandler.NewPositionHandler(&fakePositionReader{}, testLogger)
 	resp, err := h.ListPositions(context.Background(), &pb.ListPositionsRequest{AccountId: "acc1"})
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Positions)
@@ -144,14 +144,14 @@ func TestListPositions_Empty(t *testing.T) {
 }
 
 func TestGetPosition_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewPositionHandler(&fakePositionReader{})
+	h := grpchandler.NewPositionHandler(&fakePositionReader{}, testLogger)
 	_, err := h.GetPosition(context.Background(), &pb.GetPositionRequest{Id: "p1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetPosition_RequiresID(t *testing.T) {
-	h := grpchandler.NewPositionHandler(&fakePositionReader{})
+	h := grpchandler.NewPositionHandler(&fakePositionReader{}, testLogger)
 	_, err := h.GetPosition(context.Background(), &pb.GetPositionRequest{AccountId: "acc1"})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -164,7 +164,7 @@ func TestGetPosition_Found(t *testing.T) {
 			makeTestPosition("p1", "acc1", "chain1", &now),
 		},
 	}
-	h := grpchandler.NewPositionHandler(fake)
+	h := grpchandler.NewPositionHandler(fake, testLogger)
 
 	resp, err := h.GetPosition(context.Background(), &pb.GetPositionRequest{AccountId: "acc1", Id: "p1"})
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestGetPosition_Found(t *testing.T) {
 }
 
 func TestGetPosition_NotFound(t *testing.T) {
-	h := grpchandler.NewPositionHandler(&fakePositionReader{})
+	h := grpchandler.NewPositionHandler(&fakePositionReader{}, testLogger)
 	_, err := h.GetPosition(context.Background(), &pb.GetPositionRequest{AccountId: "acc1", Id: "missing"})
 	require.Error(t, err)
 	assert.Equal(t, codes.NotFound, status.Code(err))
@@ -185,7 +185,7 @@ func TestGetPosition_WrongAccount(t *testing.T) {
 	fake := &fakePositionReader{
 		positions: []domain.Position{makeTestPosition("p1", "acc1", "chain1", nil)},
 	}
-	h := grpchandler.NewPositionHandler(fake)
+	h := grpchandler.NewPositionHandler(fake, testLogger)
 
 	_, err := h.GetPosition(context.Background(), &pb.GetPositionRequest{AccountId: "other", Id: "p1"})
 	require.Error(t, err)

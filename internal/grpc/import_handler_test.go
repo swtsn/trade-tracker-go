@@ -71,7 +71,7 @@ func TestImportTransactions_Success(t *testing.T) {
 	imp := &fakeImporter{
 		result: &service.ImportResult{Imported: 1, Skipped: 0, Failed: 0},
 	}
-	h := grpchandler.NewImportHandler(imp)
+	h := grpchandler.NewImportHandler(imp, testLogger)
 	stream := newFakeImportStream()
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
@@ -105,7 +105,7 @@ func TestImportTransactions_WithFailures(t *testing.T) {
 			},
 		},
 	}
-	h := grpchandler.NewImportHandler(imp)
+	h := grpchandler.NewImportHandler(imp, testLogger)
 	stream := newFakeImportStream()
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
@@ -128,7 +128,7 @@ func TestImportTransactions_WithFailures(t *testing.T) {
 
 func TestImportTransactions_ImporterFatalError(t *testing.T) {
 	imp := &fakeImporter{err: errors.New("db connection lost")}
-	h := grpchandler.NewImportHandler(imp)
+	h := grpchandler.NewImportHandler(imp, testLogger)
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
 		AccountId: "acct-1",
@@ -141,7 +141,7 @@ func TestImportTransactions_ImporterFatalError(t *testing.T) {
 }
 
 func TestImportTransactions_MissingAccountID(t *testing.T) {
-	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}})
+	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
 		Broker:  pb.Broker_BROKER_TASTYTRADE,
@@ -153,7 +153,7 @@ func TestImportTransactions_MissingAccountID(t *testing.T) {
 }
 
 func TestImportTransactions_MissingBroker(t *testing.T) {
-	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}})
+	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
 
 	// Omitting broker leaves it at the zero value (BROKER_UNSPECIFIED).
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
@@ -166,7 +166,7 @@ func TestImportTransactions_MissingBroker(t *testing.T) {
 }
 
 func TestImportTransactions_MissingCSVData(t *testing.T) {
-	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}})
+	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
 		AccountId: "acct-1",
@@ -178,7 +178,7 @@ func TestImportTransactions_MissingCSVData(t *testing.T) {
 }
 
 func TestImportTransactions_CSVDataTooLarge(t *testing.T) {
-	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}})
+	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
 	oversized := []byte(strings.Repeat("a", (1<<20)+1))
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
@@ -192,7 +192,7 @@ func TestImportTransactions_CSVDataTooLarge(t *testing.T) {
 }
 
 func TestImportTransactions_UnsupportedBroker(t *testing.T) {
-	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}})
+	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
 
 	// Use an out-of-range numeric value to simulate a broker the server doesn't handle.
 	// Proto3 preserves unknown enum values as their numeric representation.

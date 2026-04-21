@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 )
 
 func newPositionSvc(repos *sqlite.Repos) *service.PositionService {
-	return service.NewPositionService(repos.Positions)
+	return service.NewPositionService(repos.Positions, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // seedPositionTrade seeds a trade + instruments; returns the trade and transactions.

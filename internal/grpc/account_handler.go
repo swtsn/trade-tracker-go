@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,18 +20,19 @@ type AccountHandler struct {
 	pb.UnimplementedAccountServiceServer
 	accounts service.AccountReader
 	writer   service.AccountWriter
+	logger   *slog.Logger
 }
 
 // NewAccountHandler creates an AccountHandler backed by the given reader and writer.
-func NewAccountHandler(accounts service.AccountReader, writer service.AccountWriter) *AccountHandler {
-	return &AccountHandler{accounts: accounts, writer: writer}
+func NewAccountHandler(accounts service.AccountReader, writer service.AccountWriter, logger *slog.Logger) *AccountHandler {
+	return &AccountHandler{accounts: accounts, writer: writer, logger: logger}
 }
 
 func (h *AccountHandler) ListAccounts(ctx context.Context, req *pb.ListAccountsRequest) (*pb.ListAccountsResponse, error) {
 	_ = req // pagination not yet implemented; reserved fields are accepted and ignored
 	accts, err := h.accounts.List(ctx)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	resp := &pb.ListAccountsResponse{
 		Accounts: make([]*pb.Account, len(accts)),
@@ -47,7 +49,7 @@ func (h *AccountHandler) GetAccount(ctx context.Context, req *pb.GetAccountReque
 	}
 	a, err := h.accounts.GetByID(ctx, req.Id)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	if a == nil {
 		return nil, status.Error(codes.NotFound, "account not found")
@@ -74,7 +76,7 @@ func (h *AccountHandler) CreateAccount(ctx context.Context, req *pb.CreateAccoun
 		CreatedAt:     time.Now().UTC(),
 	}
 	if err := h.writer.Create(ctx, account); err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	return &pb.CreateAccountResponse{Account: accountToProto(account)}, nil
 }
@@ -87,10 +89,10 @@ func (h *AccountHandler) UpdateAccount(ctx context.Context, req *pb.UpdateAccoun
 	// regardless of concurrent renames from other clients.
 	a, err := h.accounts.GetByID(ctx, req.Id)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	if err := h.writer.UpdateName(ctx, req.Id, req.Name); err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	a.Name = req.Name
 	return &pb.UpdateAccountResponse{Account: accountToProto(a)}, nil
