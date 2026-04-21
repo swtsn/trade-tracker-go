@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -41,7 +42,9 @@ func NewChainService(
 //   - Close-only trade: records a close ChainLink; if no open balance remains, marks chain closed.
 //
 // Idempotent: trades already assigned to a chain (via original_trade_id or chain_links) are skipped.
-// Unattributable trades (e.g. a close with no matching open chain) are skipped with no error.
+// Unattributable close-only trades (no matching open chain) are skipped with no error.
+// Unattributable mixed trades (close+open, no matching open chain) start a new chain from
+// the opening legs and emit a warning log; the closing legs' P&L is not attributed.
 //
 // Not concurrent-safe: must not be called simultaneously for the same account.
 // Loads all trades into memory; not suitable for accounts with very large trade histories.
@@ -174,7 +177,7 @@ func (s *ChainService) GetChainPnL(ctx context.Context, chainID string) (decimal
 }
 
 // processTrade classifies one trade, applies the appropriate chain action, and returns the chain ID.
-// Returns an empty string for neutral-only or unattributable trades.
+// Returns an empty string for neutral-only trades or close-only trades with no matching open chain.
 func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (string, error) {
 	// Idempotency: if this trade is already assigned to a chain, return its ID.
 	existing, err := s.chains.GetChainByTradeID(ctx, trade.ID)
@@ -210,7 +213,23 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 	chainID, err := s.attributeChain(ctx, txns)
 	if err != nil {
 		if errors.Is(err, domain.ErrUnattributableTrade) {
-			return "", nil // skip; open trade not yet processed (e.g. out-of-order import)
+			if !hasOpening {
+				// Close-only trade with no matching open chain — skip entirely.
+				// Typical for out-of-order imports; re-run DetectChains once the
+				// opening trade is present.
+				return "", nil
+			}
+			// Mixed trade (close + open) with no open chain for the closing legs.
+			// This is expected on first imports that start mid-history: the original
+			// opening trade was never imported, so there is no chain to attribute to.
+			// Start a new chain from this trade so the opening legs are not orphaned.
+			// WARNING: the closing legs' P&L is unattributed and will not appear in
+			// chain analytics. Manual chain stitching or a re-run of DetectChains
+			// after importing earlier history is required to repair this.
+			log.Printf("WARNING chain service: trade %s is mixed (close+open) but no open chain found for closing legs; starting new chain from opening legs — closing P&L unattributed", trade.ID)
+			// trade.ID is mixed (has closing legs); chain OriginalTradeID will point at a mixed
+			// trade rather than the usual opening-only trade. See future.md for repair paths.
+			return s.startChain(ctx, trade, txns)
 		}
 		return "", err
 	}

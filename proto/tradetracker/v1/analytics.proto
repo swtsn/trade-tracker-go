@@ -9,6 +9,10 @@ import "google/protobuf/timestamp.proto";
 service AnalyticsService {
   // GetAccountSummary returns aggregate P&L statistics for an account over a date range.
   rpc GetAccountSummary(GetAccountSummaryRequest) returns (GetAccountSummaryResponse);
+  // GetSymbolPerformance returns net realized P&L for one underlying symbol over a date range.
+  rpc GetSymbolPerformance(GetSymbolPerformanceRequest) returns (GetSymbolPerformanceResponse);
+  // GetStrategyPerformance returns per-strategy P&L and win-rate for closed positions.
+  rpc GetStrategyPerformance(GetStrategyPerformanceRequest) returns (GetStrategyPerformanceResponse);
 }
 
 message GetAccountSummaryRequest {
@@ -30,4 +34,45 @@ message GetAccountSummaryResponse {
   string win_rate = 3;
   // positions_closed is the count of positions whose closed_at falls within the date range.
   int32 positions_closed = 4;
+}
+
+message GetSymbolPerformanceRequest {
+  // account_id is required.
+  string account_id = 1;
+  // symbol is the underlying root symbol (e.g. "SPY"). Required.
+  string symbol = 2;
+  // from and to define the date range applied to lot_closings.closed_at. Both are required.
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+message GetSymbolPerformanceResponse {
+  // realized_pnl is a decimal string; net realized P&L for the symbol over the period.
+  string realized_pnl = 1;
+}
+
+message GetStrategyPerformanceRequest {
+  // account_id is required.
+  string account_id = 1;
+  // from and to define the date range applied to positions.closed_at. Both are required.
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+}
+
+message GetStrategyPerformanceResponse {
+  // stats contains one entry per strategy type found in the date range.
+  repeated StrategyStats stats = 1;
+}
+
+message StrategyStats {
+  // strategy_type is the domain strategy name (e.g. "single", "vertical").
+  string strategy_type = 1;
+  // count is the number of closed positions with this strategy.
+  int32 count = 2;
+  // win_rate is a decimal string in [0, 1].
+  string win_rate = 3;
+  // average_pnl is a decimal string; mean realized P&L per closed position.
+  string average_pnl = 4;
+  // total_pnl is a decimal string; sum of realized P&L for all closed positions.
+  string total_pnl = 5;
 }

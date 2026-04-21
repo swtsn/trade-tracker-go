@@ -66,13 +66,6 @@ type ChainReader interface {
 	GetChainDetail(ctx context.Context, accountID, chainID string) (*domain.ChainDetail, error)
 }
 
-// AccountSummaryReader returns P&L summary data for an account.
-// Used by the analytics gRPC handler.
-// *AnalyticsService satisfies this interface.
-type AccountSummaryReader interface {
-	GetPnLSummary(ctx context.Context, accountID string, from, to time.Time) (*PnLSummary, error)
-}
-
 // Analytics computes P&L and performance aggregates.
 // All methods are read-only.
 // *AnalyticsService satisfies this interface.
