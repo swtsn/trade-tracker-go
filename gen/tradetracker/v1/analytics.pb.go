@@ -158,6 +158,310 @@ func (x *GetAccountSummaryResponse) GetPositionsClosed() int32 {
 	return 0
 }
 
+type GetSymbolPerformanceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// account_id is required.
+	AccountId string `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// symbol is the underlying root symbol (e.g. "SPY"). Required.
+	Symbol string `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	// from and to define the date range applied to lot_closings.closed_at. Both are required.
+	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSymbolPerformanceRequest) Reset() {
+	*x = GetSymbolPerformanceRequest{}
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSymbolPerformanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSymbolPerformanceRequest) ProtoMessage() {}
+
+func (x *GetSymbolPerformanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSymbolPerformanceRequest.ProtoReflect.Descriptor instead.
+func (*GetSymbolPerformanceRequest) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_analytics_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetSymbolPerformanceRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *GetSymbolPerformanceRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *GetSymbolPerformanceRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *GetSymbolPerformanceRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+type GetSymbolPerformanceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// realized_pnl is a decimal string; net realized P&L for the symbol over the period.
+	RealizedPnl   string `protobuf:"bytes,1,opt,name=realized_pnl,json=realizedPnl,proto3" json:"realized_pnl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSymbolPerformanceResponse) Reset() {
+	*x = GetSymbolPerformanceResponse{}
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSymbolPerformanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSymbolPerformanceResponse) ProtoMessage() {}
+
+func (x *GetSymbolPerformanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSymbolPerformanceResponse.ProtoReflect.Descriptor instead.
+func (*GetSymbolPerformanceResponse) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_analytics_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetSymbolPerformanceResponse) GetRealizedPnl() string {
+	if x != nil {
+		return x.RealizedPnl
+	}
+	return ""
+}
+
+type GetStrategyPerformanceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// account_id is required.
+	AccountId string `protobuf:"bytes,1,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	// from and to define the date range applied to positions.closed_at. Both are required.
+	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyPerformanceRequest) Reset() {
+	*x = GetStrategyPerformanceRequest{}
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyPerformanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyPerformanceRequest) ProtoMessage() {}
+
+func (x *GetStrategyPerformanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyPerformanceRequest.ProtoReflect.Descriptor instead.
+func (*GetStrategyPerformanceRequest) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_analytics_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetStrategyPerformanceRequest) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
+	}
+	return ""
+}
+
+func (x *GetStrategyPerformanceRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *GetStrategyPerformanceRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+type GetStrategyPerformanceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// stats contains one entry per strategy type found in the date range.
+	Stats         []*StrategyStats `protobuf:"bytes,1,rep,name=stats,proto3" json:"stats,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStrategyPerformanceResponse) Reset() {
+	*x = GetStrategyPerformanceResponse{}
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStrategyPerformanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStrategyPerformanceResponse) ProtoMessage() {}
+
+func (x *GetStrategyPerformanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStrategyPerformanceResponse.ProtoReflect.Descriptor instead.
+func (*GetStrategyPerformanceResponse) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_analytics_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetStrategyPerformanceResponse) GetStats() []*StrategyStats {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
+type StrategyStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// strategy_type is the domain strategy name (e.g. "single", "vertical").
+	StrategyType string `protobuf:"bytes,1,opt,name=strategy_type,json=strategyType,proto3" json:"strategy_type,omitempty"`
+	// count is the number of closed positions with this strategy.
+	Count int32 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	// win_rate is a decimal string in [0, 1].
+	WinRate string `protobuf:"bytes,3,opt,name=win_rate,json=winRate,proto3" json:"win_rate,omitempty"`
+	// average_pnl is a decimal string; mean realized P&L per closed position.
+	AveragePnl string `protobuf:"bytes,4,opt,name=average_pnl,json=averagePnl,proto3" json:"average_pnl,omitempty"`
+	// total_pnl is a decimal string; sum of realized P&L for all closed positions.
+	TotalPnl      string `protobuf:"bytes,5,opt,name=total_pnl,json=totalPnl,proto3" json:"total_pnl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StrategyStats) Reset() {
+	*x = StrategyStats{}
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StrategyStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StrategyStats) ProtoMessage() {}
+
+func (x *StrategyStats) ProtoReflect() protoreflect.Message {
+	mi := &file_tradetracker_v1_analytics_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StrategyStats.ProtoReflect.Descriptor instead.
+func (*StrategyStats) Descriptor() ([]byte, []int) {
+	return file_tradetracker_v1_analytics_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *StrategyStats) GetStrategyType() string {
+	if x != nil {
+		return x.StrategyType
+	}
+	return ""
+}
+
+func (x *StrategyStats) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *StrategyStats) GetWinRate() string {
+	if x != nil {
+		return x.WinRate
+	}
+	return ""
+}
+
+func (x *StrategyStats) GetAveragePnl() string {
+	if x != nil {
+		return x.AveragePnl
+	}
+	return ""
+}
+
+func (x *StrategyStats) GetTotalPnl() string {
+	if x != nil {
+		return x.TotalPnl
+	}
+	return ""
+}
+
 var File_tradetracker_v1_analytics_proto protoreflect.FileDescriptor
 
 const file_tradetracker_v1_analytics_proto_rawDesc = "" +
@@ -173,9 +477,33 @@ const file_tradetracker_v1_analytics_proto_rawDesc = "" +
 	"\n" +
 	"close_fees\x18\x02 \x01(\tR\tcloseFees\x12\x19\n" +
 	"\bwin_rate\x18\x03 \x01(\tR\awinRate\x12)\n" +
-	"\x10positions_closed\x18\x04 \x01(\x05R\x0fpositionsClosed2~\n" +
+	"\x10positions_closed\x18\x04 \x01(\x05R\x0fpositionsClosed\"\xb0\x01\n" +
+	"\x1bGetSymbolPerformanceRequest\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12\x16\n" +
+	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12.\n" +
+	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"A\n" +
+	"\x1cGetSymbolPerformanceResponse\x12!\n" +
+	"\frealized_pnl\x18\x01 \x01(\tR\vrealizedPnl\"\x9a\x01\n" +
+	"\x1dGetStrategyPerformanceRequest\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x01 \x01(\tR\taccountId\x12.\n" +
+	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\"V\n" +
+	"\x1eGetStrategyPerformanceResponse\x124\n" +
+	"\x05stats\x18\x01 \x03(\v2\x1e.tradetracker.v1.StrategyStatsR\x05stats\"\xa3\x01\n" +
+	"\rStrategyStats\x12#\n" +
+	"\rstrategy_type\x18\x01 \x01(\tR\fstrategyType\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\x12\x19\n" +
+	"\bwin_rate\x18\x03 \x01(\tR\awinRate\x12\x1f\n" +
+	"\vaverage_pnl\x18\x04 \x01(\tR\n" +
+	"averagePnl\x12\x1b\n" +
+	"\ttotal_pnl\x18\x05 \x01(\tR\btotalPnl2\xee\x02\n" +
 	"\x10AnalyticsService\x12j\n" +
-	"\x11GetAccountSummary\x12).tradetracker.v1.GetAccountSummaryRequest\x1a*.tradetracker.v1.GetAccountSummaryResponseB5Z3trade-tracker-go/gen/tradetracker/v1;tradetrackerpbb\x06proto3"
+	"\x11GetAccountSummary\x12).tradetracker.v1.GetAccountSummaryRequest\x1a*.tradetracker.v1.GetAccountSummaryResponse\x12s\n" +
+	"\x14GetSymbolPerformance\x12,.tradetracker.v1.GetSymbolPerformanceRequest\x1a-.tradetracker.v1.GetSymbolPerformanceResponse\x12y\n" +
+	"\x16GetStrategyPerformance\x12..tradetracker.v1.GetStrategyPerformanceRequest\x1a/.tradetracker.v1.GetStrategyPerformanceResponseB5Z3trade-tracker-go/gen/tradetracker/v1;tradetrackerpbb\x06proto3"
 
 var (
 	file_tradetracker_v1_analytics_proto_rawDescOnce sync.Once
@@ -189,22 +517,36 @@ func file_tradetracker_v1_analytics_proto_rawDescGZIP() []byte {
 	return file_tradetracker_v1_analytics_proto_rawDescData
 }
 
-var file_tradetracker_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_tradetracker_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_tradetracker_v1_analytics_proto_goTypes = []any{
-	(*GetAccountSummaryRequest)(nil),  // 0: tradetracker.v1.GetAccountSummaryRequest
-	(*GetAccountSummaryResponse)(nil), // 1: tradetracker.v1.GetAccountSummaryResponse
-	(*timestamppb.Timestamp)(nil),     // 2: google.protobuf.Timestamp
+	(*GetAccountSummaryRequest)(nil),       // 0: tradetracker.v1.GetAccountSummaryRequest
+	(*GetAccountSummaryResponse)(nil),      // 1: tradetracker.v1.GetAccountSummaryResponse
+	(*GetSymbolPerformanceRequest)(nil),    // 2: tradetracker.v1.GetSymbolPerformanceRequest
+	(*GetSymbolPerformanceResponse)(nil),   // 3: tradetracker.v1.GetSymbolPerformanceResponse
+	(*GetStrategyPerformanceRequest)(nil),  // 4: tradetracker.v1.GetStrategyPerformanceRequest
+	(*GetStrategyPerformanceResponse)(nil), // 5: tradetracker.v1.GetStrategyPerformanceResponse
+	(*StrategyStats)(nil),                  // 6: tradetracker.v1.StrategyStats
+	(*timestamppb.Timestamp)(nil),          // 7: google.protobuf.Timestamp
 }
 var file_tradetracker_v1_analytics_proto_depIdxs = []int32{
-	2, // 0: tradetracker.v1.GetAccountSummaryRequest.from:type_name -> google.protobuf.Timestamp
-	2, // 1: tradetracker.v1.GetAccountSummaryRequest.to:type_name -> google.protobuf.Timestamp
-	0, // 2: tradetracker.v1.AnalyticsService.GetAccountSummary:input_type -> tradetracker.v1.GetAccountSummaryRequest
-	1, // 3: tradetracker.v1.AnalyticsService.GetAccountSummary:output_type -> tradetracker.v1.GetAccountSummaryResponse
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	7,  // 0: tradetracker.v1.GetAccountSummaryRequest.from:type_name -> google.protobuf.Timestamp
+	7,  // 1: tradetracker.v1.GetAccountSummaryRequest.to:type_name -> google.protobuf.Timestamp
+	7,  // 2: tradetracker.v1.GetSymbolPerformanceRequest.from:type_name -> google.protobuf.Timestamp
+	7,  // 3: tradetracker.v1.GetSymbolPerformanceRequest.to:type_name -> google.protobuf.Timestamp
+	7,  // 4: tradetracker.v1.GetStrategyPerformanceRequest.from:type_name -> google.protobuf.Timestamp
+	7,  // 5: tradetracker.v1.GetStrategyPerformanceRequest.to:type_name -> google.protobuf.Timestamp
+	6,  // 6: tradetracker.v1.GetStrategyPerformanceResponse.stats:type_name -> tradetracker.v1.StrategyStats
+	0,  // 7: tradetracker.v1.AnalyticsService.GetAccountSummary:input_type -> tradetracker.v1.GetAccountSummaryRequest
+	2,  // 8: tradetracker.v1.AnalyticsService.GetSymbolPerformance:input_type -> tradetracker.v1.GetSymbolPerformanceRequest
+	4,  // 9: tradetracker.v1.AnalyticsService.GetStrategyPerformance:input_type -> tradetracker.v1.GetStrategyPerformanceRequest
+	1,  // 10: tradetracker.v1.AnalyticsService.GetAccountSummary:output_type -> tradetracker.v1.GetAccountSummaryResponse
+	3,  // 11: tradetracker.v1.AnalyticsService.GetSymbolPerformance:output_type -> tradetracker.v1.GetSymbolPerformanceResponse
+	5,  // 12: tradetracker.v1.AnalyticsService.GetStrategyPerformance:output_type -> tradetracker.v1.GetStrategyPerformanceResponse
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_tradetracker_v1_analytics_proto_init() }
@@ -218,7 +560,7 @@ func file_tradetracker_v1_analytics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tradetracker_v1_analytics_proto_rawDesc), len(file_tradetracker_v1_analytics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

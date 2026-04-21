@@ -19,7 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AnalyticsService_GetAccountSummary_FullMethodName = "/tradetracker.v1.AnalyticsService/GetAccountSummary"
+	AnalyticsService_GetAccountSummary_FullMethodName      = "/tradetracker.v1.AnalyticsService/GetAccountSummary"
+	AnalyticsService_GetSymbolPerformance_FullMethodName   = "/tradetracker.v1.AnalyticsService/GetSymbolPerformance"
+	AnalyticsService_GetStrategyPerformance_FullMethodName = "/tradetracker.v1.AnalyticsService/GetStrategyPerformance"
 )
 
 // AnalyticsServiceClient is the client API for AnalyticsService service.
@@ -28,6 +30,10 @@ const (
 type AnalyticsServiceClient interface {
 	// GetAccountSummary returns aggregate P&L statistics for an account over a date range.
 	GetAccountSummary(ctx context.Context, in *GetAccountSummaryRequest, opts ...grpc.CallOption) (*GetAccountSummaryResponse, error)
+	// GetSymbolPerformance returns net realized P&L for one underlying symbol over a date range.
+	GetSymbolPerformance(ctx context.Context, in *GetSymbolPerformanceRequest, opts ...grpc.CallOption) (*GetSymbolPerformanceResponse, error)
+	// GetStrategyPerformance returns per-strategy P&L and win-rate for closed positions.
+	GetStrategyPerformance(ctx context.Context, in *GetStrategyPerformanceRequest, opts ...grpc.CallOption) (*GetStrategyPerformanceResponse, error)
 }
 
 type analyticsServiceClient struct {
@@ -48,12 +54,36 @@ func (c *analyticsServiceClient) GetAccountSummary(ctx context.Context, in *GetA
 	return out, nil
 }
 
+func (c *analyticsServiceClient) GetSymbolPerformance(ctx context.Context, in *GetSymbolPerformanceRequest, opts ...grpc.CallOption) (*GetSymbolPerformanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSymbolPerformanceResponse)
+	err := c.cc.Invoke(ctx, AnalyticsService_GetSymbolPerformance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analyticsServiceClient) GetStrategyPerformance(ctx context.Context, in *GetStrategyPerformanceRequest, opts ...grpc.CallOption) (*GetStrategyPerformanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetStrategyPerformanceResponse)
+	err := c.cc.Invoke(ctx, AnalyticsService_GetStrategyPerformance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AnalyticsServiceServer is the server API for AnalyticsService service.
 // All implementations must embed UnimplementedAnalyticsServiceServer
 // for forward compatibility.
 type AnalyticsServiceServer interface {
 	// GetAccountSummary returns aggregate P&L statistics for an account over a date range.
 	GetAccountSummary(context.Context, *GetAccountSummaryRequest) (*GetAccountSummaryResponse, error)
+	// GetSymbolPerformance returns net realized P&L for one underlying symbol over a date range.
+	GetSymbolPerformance(context.Context, *GetSymbolPerformanceRequest) (*GetSymbolPerformanceResponse, error)
+	// GetStrategyPerformance returns per-strategy P&L and win-rate for closed positions.
+	GetStrategyPerformance(context.Context, *GetStrategyPerformanceRequest) (*GetStrategyPerformanceResponse, error)
 	mustEmbedUnimplementedAnalyticsServiceServer()
 }
 
@@ -66,6 +96,12 @@ type UnimplementedAnalyticsServiceServer struct{}
 
 func (UnimplementedAnalyticsServiceServer) GetAccountSummary(context.Context, *GetAccountSummaryRequest) (*GetAccountSummaryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAccountSummary not implemented")
+}
+func (UnimplementedAnalyticsServiceServer) GetSymbolPerformance(context.Context, *GetSymbolPerformanceRequest) (*GetSymbolPerformanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSymbolPerformance not implemented")
+}
+func (UnimplementedAnalyticsServiceServer) GetStrategyPerformance(context.Context, *GetStrategyPerformanceRequest) (*GetStrategyPerformanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetStrategyPerformance not implemented")
 }
 func (UnimplementedAnalyticsServiceServer) mustEmbedUnimplementedAnalyticsServiceServer() {}
 func (UnimplementedAnalyticsServiceServer) testEmbeddedByValue()                          {}
@@ -106,6 +142,42 @@ func _AnalyticsService_GetAccountSummary_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalyticsService_GetSymbolPerformance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSymbolPerformanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsServiceServer).GetSymbolPerformance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsService_GetSymbolPerformance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsServiceServer).GetSymbolPerformance(ctx, req.(*GetSymbolPerformanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalyticsService_GetStrategyPerformance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStrategyPerformanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalyticsServiceServer).GetStrategyPerformance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalyticsService_GetStrategyPerformance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalyticsServiceServer).GetStrategyPerformance(ctx, req.(*GetStrategyPerformanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AnalyticsService_ServiceDesc is the grpc.ServiceDesc for AnalyticsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -116,6 +188,14 @@ var AnalyticsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAccountSummary",
 			Handler:    _AnalyticsService_GetAccountSummary_Handler,
+		},
+		{
+			MethodName: "GetSymbolPerformance",
+			Handler:    _AnalyticsService_GetSymbolPerformance_Handler,
+		},
+		{
+			MethodName: "GetStrategyPerformance",
+			Handler:    _AnalyticsService_GetStrategyPerformance_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

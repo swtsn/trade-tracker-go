@@ -451,6 +451,43 @@ func TestChainService_UnattributableCloseIsSkipped(t *testing.T) {
 	assert.Nil(t, chains[0].ClosedAt, "chain remains open — close was not attributed")
 }
 
+// TestChainService_MixedUnattributableStartsNewChain: a mixed trade (close+open) with no
+// matching open chain in the account — typical for first imports starting mid-history —
+// starts a new chain from the opening legs rather than being silently dropped.
+// The unattributed closing legs do not create chain links or close the chain.
+func TestChainService_MixedUnattributableStartsNewChain(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newChainSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+
+	exp1 := time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC)
+	exp2 := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
+	tradeAt := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+
+	// A roll with no prior opening trade in the account: the put being closed was
+	// opened in a statement period we never imported.
+	tradeID := uuid.New().String()
+	putInst1 := makeEquityOption("SPY", 490, exp1, domain.OptionTypePut)
+	putInst2 := makeEquityOption("SPY", 480, exp2, domain.OptionTypePut)
+	closeTx := makeTransaction(tradeID, "mu-001", acc.ID, acc.Broker, putInst1, domain.ActionBTC, domain.PositionEffectClosing, 1, tradeAt)
+	openTx := makeTransaction(tradeID, "mu-002", acc.ID, acc.Broker, putInst2, domain.ActionSTO, domain.PositionEffectOpening, 1, tradeAt)
+	seedChainTrade(t, ctx, repos, acc, tradeID, tradeAt, closeTx, openTx)
+
+	require.NoError(t, svc.DetectChains(ctx, acc.ID))
+
+	chains, err := repos.Chains.ListChainsByAccount(ctx, acc.ID, false)
+	require.NoError(t, err)
+	require.Len(t, chains, 1, "one chain started from the opening legs")
+	assert.Equal(t, tradeID, chains[0].OriginalTradeID)
+
+	links, err := repos.Chains.ListChainLinks(ctx, chains[0].ID)
+	require.NoError(t, err)
+	assert.Empty(t, links, "no chain links — opening legs start the chain, not extend it")
+
+	assert.Nil(t, chains[0].ClosedAt, "chain is open; unattributed closing legs do not close it")
+}
+
 // --- test helpers ---
 
 // seedChainTrade creates a trade and its transactions in the DB.
