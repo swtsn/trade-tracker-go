@@ -22,13 +22,13 @@ func openTestDB(t *testing.T) *sqlite.Repos {
 	return repos
 }
 
-// seedAccount inserts and returns a test account.
+// seedAccount inserts and returns a test account with a unique account number.
 func seedAccount(t *testing.T, ctx context.Context, repos *sqlite.Repos) *domain.Account {
 	t.Helper()
 	acc := &domain.Account{
 		ID:            uuid.New().String(),
 		Broker:        "tastytrade",
-		AccountNumber: "ABC123",
+		AccountNumber: uuid.New().String(), // unique per call to satisfy UNIQUE(broker, account_number)
 		Name:          "Test Account",
 		CreatedAt:     time.Now().UTC().Truncate(time.Second),
 	}
