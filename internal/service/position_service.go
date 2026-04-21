@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,11 +23,12 @@ var ErrNoOpenLots = errors.New("no open lots for instrument")
 // It is called as a post-import hook after ChainService has assigned a chain ID.
 type PositionService struct {
 	positions repository.PositionRepository
+	logger    *slog.Logger
 }
 
 // NewPositionService creates a PositionService with the given repository.
-func NewPositionService(positions repository.PositionRepository) *PositionService {
-	return &PositionService{positions: positions}
+func NewPositionService(positions repository.PositionRepository, logger *slog.Logger) *PositionService {
+	return &PositionService{positions: positions, logger: logger}
 }
 
 // GetPosition returns a position by ID.
@@ -57,7 +58,7 @@ func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns
 		case domain.PositionEffectClosing:
 			if err := s.processClosing(ctx, tx); err != nil {
 				if errors.Is(err, ErrNoOpenLots) {
-					log.Printf("position service: closing tx %s: %v; skipping", tx.ID, err)
+					s.logger.Warn("closing tx skipped: no open lots", "tx_id", tx.ID, "err", err)
 					continue
 				}
 				return fmt.Errorf("position service: closing tx %s: %w", tx.ID, err)
@@ -278,8 +279,7 @@ func (s *PositionService) accumulatePnL(
 			// historical imports where position tracking was not yet active, but it
 			// also masks bugs (e.g. prior hook failure that skipped CreatePosition).
 			// Log so the discrepancy is detectable; realized_pnl will not be updated.
-			log.Printf("position service: lot %s (chain %s, trade %s) has no position row; realized_pnl not updated",
-				lot.ID, lot.ChainID, lot.TradeID)
+			s.logger.Warn("lot has no position row; realized_pnl not updated", "lot_id", lot.ID, "chain_id", lot.ChainID, "trade_id", lot.TradeID)
 			return nil
 		}
 		return fmt.Errorf("find position for lot %s: %w", lot.ID, err)

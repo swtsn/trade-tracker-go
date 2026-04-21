@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,11 +19,12 @@ const maxTradePageSize = 500
 type TradeHandler struct {
 	pb.UnimplementedTradeServiceServer
 	trades repository.TradeReader
+	logger *slog.Logger
 }
 
 // NewTradeHandler creates a TradeHandler backed by the given reader.
-func NewTradeHandler(trades repository.TradeReader) *TradeHandler {
-	return &TradeHandler{trades: trades}
+func NewTradeHandler(trades repository.TradeReader, logger *slog.Logger) *TradeHandler {
+	return &TradeHandler{trades: trades, logger: logger}
 }
 
 func (h *TradeHandler) ListTrades(ctx context.Context, req *pb.ListTradesRequest) (*pb.ListTradesResponse, error) {
@@ -54,7 +56,7 @@ func (h *TradeHandler) ListTrades(ctx context.Context, req *pb.ListTradesRequest
 
 	trades, total, err := h.trades.ListByAccountWithTransactions(ctx, req.AccountId, opts)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 
 	resp := &pb.ListTradesResponse{
@@ -76,7 +78,7 @@ func (h *TradeHandler) GetTrade(ctx context.Context, req *pb.GetTradeRequest) (*
 	}
 	t, err := h.trades.GetByIDAndAccount(ctx, req.AccountId, req.Id)
 	if err != nil {
-		return nil, toGRPCError(err)
+		return nil, toGRPCError(h.logger, err)
 	}
 	return &pb.GetTradeResponse{Trade: tradeToProto(t)}, nil
 }

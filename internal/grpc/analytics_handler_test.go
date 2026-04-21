@@ -5,16 +5,17 @@ import (
 	"testing"
 	"time"
 
+	pb "trade-tracker-go/gen/tradetracker/v1"
+	"trade-tracker-go/internal/domain"
+	grpchandler "trade-tracker-go/internal/grpc"
+	"trade-tracker-go/internal/service"
+
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	pb "trade-tracker-go/gen/tradetracker/v1"
-	"trade-tracker-go/internal/domain"
-	grpchandler "trade-tracker-go/internal/grpc"
-	"trade-tracker-go/internal/service"
 )
 
 // fakeAnalytics is a test double for service.Analytics.
@@ -45,14 +46,14 @@ var (
 // --- GetAccountSummary ---
 
 func TestGetAccountSummary_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{})
 	require.Error(t, err)
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetAccountSummary_MissingFrom(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{
 		AccountId: "acc1",
 		To:        timestamppb.New(testTo),
@@ -62,7 +63,7 @@ func TestGetAccountSummary_MissingFrom(t *testing.T) {
 }
 
 func TestGetAccountSummary_MissingTo(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{
 		AccountId: "acc1",
 		From:      timestamppb.New(testFrom),
@@ -80,7 +81,7 @@ func TestGetAccountSummary_ReturnsSummary(t *testing.T) {
 			PositionsClosed: 18,
 		},
 	}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{
 		AccountId: "acc1",
@@ -98,7 +99,7 @@ func TestGetAccountSummary_ZeroSummary(t *testing.T) {
 	fake := &fakeAnalytics{
 		summary: &service.PnLSummary{},
 	}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{
 		AccountId: "acc1",
@@ -113,7 +114,7 @@ func TestGetAccountSummary_ZeroSummary(t *testing.T) {
 // --- GetSymbolPerformance ---
 
 func TestGetAccountSummary_InvertedRange(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetAccountSummary(context.Background(), &pb.GetAccountSummaryRequest{
 		AccountId: "acc1",
 		From:      timestamppb.New(testTo),
@@ -124,7 +125,7 @@ func TestGetAccountSummary_InvertedRange(t *testing.T) {
 }
 
 func TestGetSymbolPerformance_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		Symbol: "SPY",
 		From:   timestamppb.New(testFrom),
@@ -135,7 +136,7 @@ func TestGetSymbolPerformance_RequiresAccountID(t *testing.T) {
 }
 
 func TestGetSymbolPerformance_RequiresSymbol(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
 		From:      timestamppb.New(testFrom),
@@ -146,7 +147,7 @@ func TestGetSymbolPerformance_RequiresSymbol(t *testing.T) {
 }
 
 func TestGetSymbolPerformance_MissingFrom(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
 		Symbol:    "SPY",
@@ -157,7 +158,7 @@ func TestGetSymbolPerformance_MissingFrom(t *testing.T) {
 }
 
 func TestGetSymbolPerformance_MissingTo(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
 		Symbol:    "SPY",
@@ -168,7 +169,7 @@ func TestGetSymbolPerformance_MissingTo(t *testing.T) {
 }
 
 func TestGetSymbolPerformance_InvertedRange(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
 		Symbol:    "SPY",
@@ -181,7 +182,7 @@ func TestGetSymbolPerformance_InvertedRange(t *testing.T) {
 
 func TestGetSymbolPerformance_ReturnsPnL(t *testing.T) {
 	fake := &fakeAnalytics{symbolPnL: decimal.NewFromFloat(500.25)}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
@@ -195,7 +196,7 @@ func TestGetSymbolPerformance_ReturnsPnL(t *testing.T) {
 
 func TestGetSymbolPerformance_ZeroPnL(t *testing.T) {
 	fake := &fakeAnalytics{symbolPnL: decimal.Zero}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetSymbolPerformance(context.Background(), &pb.GetSymbolPerformanceRequest{
 		AccountId: "acc1",
@@ -210,7 +211,7 @@ func TestGetSymbolPerformance_ZeroPnL(t *testing.T) {
 // --- GetStrategyPerformance ---
 
 func TestGetStrategyPerformance_RequiresAccountID(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		From: timestamppb.New(testFrom),
 		To:   timestamppb.New(testTo),
@@ -220,7 +221,7 @@ func TestGetStrategyPerformance_RequiresAccountID(t *testing.T) {
 }
 
 func TestGetStrategyPerformance_MissingFrom(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		AccountId: "acc1",
 		To:        timestamppb.New(testTo),
@@ -230,7 +231,7 @@ func TestGetStrategyPerformance_MissingFrom(t *testing.T) {
 }
 
 func TestGetStrategyPerformance_MissingTo(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		AccountId: "acc1",
 		From:      timestamppb.New(testFrom),
@@ -240,7 +241,7 @@ func TestGetStrategyPerformance_MissingTo(t *testing.T) {
 }
 
 func TestGetStrategyPerformance_InvertedRange(t *testing.T) {
-	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{})
+	h := grpchandler.NewAnalyticsHandler(&fakeAnalytics{}, testLogger)
 	_, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		AccountId: "acc1",
 		From:      timestamppb.New(testTo),
@@ -269,7 +270,7 @@ func TestGetStrategyPerformance_ReturnsStats(t *testing.T) {
 			},
 		},
 	}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		AccountId: "acc1",
@@ -292,7 +293,7 @@ func TestGetStrategyPerformance_ReturnsStats(t *testing.T) {
 
 func TestGetStrategyPerformance_EmptyReturnsEmptyStats(t *testing.T) {
 	fake := &fakeAnalytics{strategyStats: nil}
-	h := grpchandler.NewAnalyticsHandler(fake)
+	h := grpchandler.NewAnalyticsHandler(fake, testLogger)
 
 	resp, err := h.GetStrategyPerformance(context.Background(), &pb.GetStrategyPerformanceRequest{
 		AccountId: "acc1",

@@ -8,6 +8,7 @@ package grpc_test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -26,6 +27,9 @@ import (
 	"trade-tracker-go/internal/service"
 	"trade-tracker-go/internal/strategy"
 )
+
+// testLogger discards all log output in tests.
+var testLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 // smokeCSV is a minimal Tastytrade CSV with one SELL_TO_OPEN transaction.
 // Duplicated from import_handler_test.go (same package) to keep the integration
@@ -57,7 +61,7 @@ func startSmokeServer(t *testing.T) *smokeStack {
 	t.Cleanup(func() { _ = repos.Close() })
 
 	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
-	positionSvc := service.NewPositionService(repos.Positions)
+	positionSvc := service.NewPositionService(repos.Positions, testLogger)
 	importSvc := service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
@@ -70,12 +74,12 @@ func startSmokeServer(t *testing.T) *smokeStack {
 
 	// MaxRecvMsgSize matches production (main.go).
 	srv := grpc.NewServer(grpc.MaxRecvMsgSize(2 << 20))
-	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts))
-	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc))
-	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades))
-	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc))
-	pb.RegisterChainServiceServer(srv, grpchandler.NewChainHandler(chainSvc))
-	pb.RegisterAnalyticsServiceServer(srv, grpchandler.NewAnalyticsHandler(analyticsSvc))
+	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts, testLogger))
+	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc, testLogger))
+	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades, testLogger))
+	pb.RegisterPositionServiceServer(srv, grpchandler.NewPositionHandler(positionSvc, testLogger))
+	pb.RegisterChainServiceServer(srv, grpchandler.NewChainHandler(chainSvc, testLogger))
+	pb.RegisterAnalyticsServiceServer(srv, grpchandler.NewAnalyticsHandler(analyticsSvc, testLogger))
 
 	lis := bufconn.Listen(1 << 20) // 1 MiB in-process buffer
 	t.Cleanup(func() { _ = lis.Close() })

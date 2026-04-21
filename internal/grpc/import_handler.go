@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,11 +29,12 @@ var errUnsupportedBroker = errors.New("unsupported broker")
 type ImportHandler struct {
 	pb.UnimplementedImportServiceServer
 	importer service.Importer
+	logger   *slog.Logger
 }
 
 // NewImportHandler creates an ImportHandler backed by the given importer.
-func NewImportHandler(importer service.Importer) *ImportHandler {
-	return &ImportHandler{importer: importer}
+func NewImportHandler(importer service.Importer, logger *slog.Logger) *ImportHandler {
+	return &ImportHandler{importer: importer, logger: logger}
 }
 
 func (h *ImportHandler) ImportTransactions(
@@ -62,7 +64,7 @@ func (h *ImportHandler) ImportTransactions(
 
 	result, err := h.importer.Import(stream.Context(), txns)
 	if err != nil {
-		return toGRPCError(err)
+		return toGRPCError(h.logger, err)
 	}
 
 	resp := &pb.ImportTransactionsResponse{

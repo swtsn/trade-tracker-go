@@ -53,6 +53,10 @@ concerned with positions and P&L only.
   cash balance but aren't associated with any trade. Tastytrade: `Money Movement / Balance
   Adjustment` rows.
 
+## TUI
+
+- **Server-side error surfacing** — the TUI has no structured way to surface server-side warnings or non-fatal errors to the user. The server logs these (e.g. skipped transactions, missing position rows) but the TUI client only receives gRPC status codes. A clean solution would propagate actionable server warnings through the RPC response (e.g. a repeated `warnings` field on affected responses) so the TUI can display them inline rather than silently dropping them.
+
 ## Admin / Operations
 
 - **Admin API** — long-term, an admin section is needed for operational tasks that fall outside the normal user-facing API. Initial candidate: ad-hoc chain detection (`ChainService.DetectChains`) for backfilling or reprocessing an account's history. Other candidates include manual trade reclassification and position recalculation. These should be separate RPCs (or a separate service) with restricted access, not mixed into the user-facing API.

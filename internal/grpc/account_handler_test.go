@@ -63,7 +63,7 @@ func (f *fakeAccountWriter) UpdateName(_ context.Context, id, name string) error
 }
 
 func newHandler(reader *fakeAccountReader) *grpchandler.AccountHandler {
-	return grpchandler.NewAccountHandler(reader, &fakeAccountWriter{})
+	return grpchandler.NewAccountHandler(reader, &fakeAccountWriter{}, testLogger)
 }
 
 func TestListAccounts(t *testing.T) {
@@ -135,7 +135,7 @@ func TestGetAccount_MissingID(t *testing.T) {
 func TestCreateAccount(t *testing.T) {
 	reader := &fakeAccountReader{}
 	writer := &fakeAccountWriter{}
-	h := grpchandler.NewAccountHandler(reader, writer)
+	h := grpchandler.NewAccountHandler(reader, writer, testLogger)
 
 	resp, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{
 		Broker:        "tastytrade",
@@ -154,7 +154,7 @@ func TestCreateAccount(t *testing.T) {
 }
 
 func TestCreateAccount_MissingBroker(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{}, testLogger)
 
 	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{AccountNumber: "12345"})
 	require.Error(t, err)
@@ -162,7 +162,7 @@ func TestCreateAccount_MissingBroker(t *testing.T) {
 }
 
 func TestCreateAccount_MissingAccountNumber(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{}, testLogger)
 
 	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{Broker: "tastytrade"})
 	require.Error(t, err)
@@ -171,7 +171,7 @@ func TestCreateAccount_MissingAccountNumber(t *testing.T) {
 
 func TestCreateAccount_Duplicate(t *testing.T) {
 	writer := &fakeAccountWriter{err: domain.ErrDuplicate}
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer)
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer, testLogger)
 
 	_, err := h.CreateAccount(context.Background(), &pb.CreateAccountRequest{
 		Broker: "tastytrade", AccountNumber: "12345",
@@ -188,7 +188,7 @@ func TestUpdateAccount(t *testing.T) {
 		},
 	}
 	writer := &fakeAccountWriter{}
-	h := grpchandler.NewAccountHandler(reader, writer)
+	h := grpchandler.NewAccountHandler(reader, writer, testLogger)
 
 	resp, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{Id: "a1", Name: "New"})
 	require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestUpdateAccount(t *testing.T) {
 }
 
 func TestUpdateAccount_MissingID(t *testing.T) {
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{})
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, &fakeAccountWriter{}, testLogger)
 
 	_, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{})
 	require.Error(t, err)
@@ -207,7 +207,7 @@ func TestUpdateAccount_MissingID(t *testing.T) {
 
 func TestUpdateAccount_NotFound(t *testing.T) {
 	writer := &fakeAccountWriter{err: domain.ErrNotFound}
-	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer)
+	h := grpchandler.NewAccountHandler(&fakeAccountReader{}, writer, testLogger)
 
 	_, err := h.UpdateAccount(context.Background(), &pb.UpdateAccountRequest{Id: "missing", Name: "X"})
 	require.Error(t, err)
