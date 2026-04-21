@@ -31,7 +31,7 @@ func (r *accountRepo) Create(ctx context.Context, account *domain.Account) error
 	)
 	if err != nil {
 		if isUniqueConstraint(err) {
-			return fmt.Errorf("%w: account %s", domain.ErrDuplicate, account.ID)
+			return fmt.Errorf("%w: broker %s account_number %s already exists", domain.ErrDuplicate, account.Broker, account.AccountNumber)
 		}
 		return fmt.Errorf("create account: %w", err)
 	}

@@ -53,11 +53,20 @@ func TestAccountRepository(t *testing.T) {
 		assert.Len(t, list, 2)
 	})
 
-	t.Run("duplicate id returns error", func(t *testing.T) {
+	t.Run("duplicate id returns ErrDuplicate", func(t *testing.T) {
 		r2 := openTestDB(t)
 		acc := &domain.Account{ID: uuid.New().String(), Broker: "b", AccountNumber: "X", Name: "Y", CreatedAt: time.Now().UTC()}
 		require.NoError(t, r2.Accounts.Create(ctx, acc))
 		err := r2.Accounts.Create(ctx, acc)
+		assert.ErrorIs(t, err, domain.ErrDuplicate)
+	})
+
+	t.Run("duplicate broker+account_number returns ErrDuplicate", func(t *testing.T) {
+		r2 := openTestDB(t)
+		a1 := &domain.Account{ID: uuid.New().String(), Broker: "tastytrade", AccountNumber: "DUP-001", Name: "First", CreatedAt: time.Now().UTC()}
+		a2 := &domain.Account{ID: uuid.New().String(), Broker: "tastytrade", AccountNumber: "DUP-001", Name: "Second", CreatedAt: time.Now().UTC()}
+		require.NoError(t, r2.Accounts.Create(ctx, a1))
+		err := r2.Accounts.Create(ctx, a2)
 		assert.ErrorIs(t, err, domain.ErrDuplicate)
 	})
 
