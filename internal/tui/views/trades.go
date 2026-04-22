@@ -159,30 +159,20 @@ func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
 	cols := []table.Column{
 		{Title: "Symbol", Width: 10},
 		{Title: "Strategy", Width: 10},
-		{Title: "Status", Width: 8},
-		{Title: "Opened", Width: 12},
-		{Title: "Closed", Width: 12},
+		{Title: "Executed", Width: 12},
 		{Title: "Notes", Width: 20},
 	}
 
 	rows := make([]table.Row, len(trades))
 	for i, tr := range trades {
-		status := "Open"
-		closedAt := "—"
-		if tr.ClosedAt != nil {
-			status = "Closed"
-			closedAt = formatTS(tr.ClosedAt.AsTime())
-		}
-		openedAt := "—"
-		if tr.OpenedAt != nil {
-			openedAt = formatTS(tr.OpenedAt.AsTime())
+		executedAt := "—"
+		if tr.ExecutedAt != nil {
+			executedAt = formatTS(tr.ExecutedAt.AsTime())
 		}
 		rows[i] = table.Row{
 			tr.UnderlyingSymbol,
 			strategyLabel(tr.StrategyType.String()),
-			status,
-			openedAt,
-			closedAt,
+			executedAt,
 			tr.Notes,
 		}
 	}

@@ -35,7 +35,8 @@ type Trade struct {
 	Transactions     []Transaction
 	StrategyType     StrategyType
 	UnderlyingSymbol string
-	OpenedAt         time.Time
-	ClosedAt         *time.Time
-	Notes            string
+	// ExecutedAt is the earliest ExecutedAt across the trade's transactions.
+	// It is a grouping timestamp, not a lifecycle state.
+	ExecutedAt time.Time
+	Notes      string
 }

@@ -22,8 +22,6 @@ type ListTradesParams struct {
 	StrategyType pb.StrategyType
 	From         *time.Time
 	To           *time.Time
-	OpenOnly     bool
-	ClosedOnly   bool
 }
 
 // ImportParams holds the inputs for a single ImportTransactions call.
@@ -155,14 +153,12 @@ func (c *grpcClient) ListTrades(ctx context.Context, p ListTradesParams) ([]*pb.
 		AccountId:    p.AccountID,
 		Symbol:       p.Symbol,
 		StrategyType: p.StrategyType,
-		OpenOnly:     p.OpenOnly,
-		ClosedOnly:   p.ClosedOnly,
 	}
 	if p.From != nil {
-		req.OpenedAfter = timestamppb.New(*p.From)
+		req.ExecutedAfter = timestamppb.New(*p.From)
 	}
 	if p.To != nil {
-		req.OpenedBefore = timestamppb.New(*p.To)
+		req.ExecutedBefore = timestamppb.New(*p.To)
 	}
 	resp, err := c.trades.ListTrades(ctx, req)
 	if err != nil {

@@ -75,6 +75,7 @@ func runMigrations(db *sql.DB) error {
 		{11, "migrations/011_positions_unique_trades_symbol.sql"},
 		{12, "migrations/012_transaction_broker_order_id.sql"},
 		{13, "migrations/013_accounts_unique_broker_account_number.sql"},
+		{14, "migrations/014_trade_status_cleanup.sql"},
 	}
 
 	for _, m := range migrations {

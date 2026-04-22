@@ -17,6 +17,7 @@ type Chain struct {
 	OriginalTradeID  string
 	CreatedAt        string
 	ClosedAt         sql.NullString
+	AttributionGap   int // 0 = false, 1 = true
 }
 
 // ToDomain converts to a domain.Chain (without Links — caller loads those).
@@ -32,6 +33,7 @@ func (s Chain) ToDomain() (domain.Chain, error) {
 		UnderlyingSymbol: s.UnderlyingSymbol,
 		OriginalTradeID:  s.OriginalTradeID,
 		CreatedAt:        createdAt,
+		AttributionGap:   s.AttributionGap != 0,
 	}
 	if s.ClosedAt.Valid {
 		t, err := time.Parse(time.RFC3339, s.ClosedAt.String)
@@ -54,6 +56,9 @@ func ChainToStorage(chain domain.Chain) Chain {
 	}
 	if chain.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: chain.ClosedAt.UTC().Format(time.RFC3339), Valid: true}
+	}
+	if chain.AttributionGap {
+		s.AttributionGap = 1
 	}
 	return s
 }

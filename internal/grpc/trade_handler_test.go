@@ -43,12 +43,6 @@ func (f *fakeTradeReader) ListByAccountWithTransactions(_ context.Context, accou
 		if t.AccountID != accountID {
 			continue
 		}
-		if opts.OpenOnly && t.ClosedAt != nil {
-			continue
-		}
-		if opts.ClosedOnly && t.ClosedAt == nil {
-			continue
-		}
 		if opts.Symbol != "" && t.UnderlyingSymbol != opts.Symbol {
 			continue
 		}
@@ -57,15 +51,14 @@ func (f *fakeTradeReader) ListByAccountWithTransactions(_ context.Context, accou
 	return out, len(out), nil
 }
 
-func makeTestTrade(id, accountID, symbol string, closedAt *time.Time) domain.Trade {
+func makeTestTrade(id, accountID, symbol string) domain.Trade {
 	return domain.Trade{
 		ID:               id,
 		AccountID:        accountID,
 		Broker:           "tastytrade",
 		StrategyType:     domain.StrategySingle,
 		UnderlyingSymbol: symbol,
-		OpenedAt:         time.Now().UTC().Truncate(time.Second),
-		ClosedAt:         closedAt,
+		ExecutedAt:       time.Now().UTC().Truncate(time.Second),
 		Transactions:     []domain.Transaction{},
 	}
 }
@@ -77,23 +70,11 @@ func TestListTrades_RequiresAccountID(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestListTrades_MutuallyExclusiveFilters(t *testing.T) {
-	h := grpchandler.NewTradeHandler(&fakeTradeReader{}, testLogger)
-	_, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{
-		AccountId:  "acc1",
-		OpenOnly:   true,
-		ClosedOnly: true,
-	})
-	require.Error(t, err)
-	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-}
-
 func TestListTrades_ReturnsTrades(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
 	fake := &fakeTradeReader{
 		trades: []domain.Trade{
-			makeTestTrade("t1", "acc1", "SPY", nil),
-			makeTestTrade("t2", "acc1", "AAPL", &now),
+			makeTestTrade("t1", "acc1", "SPY"),
+			makeTestTrade("t2", "acc1", "AAPL"),
 		},
 	}
 	h := grpchandler.NewTradeHandler(fake, testLogger)
@@ -106,30 +87,11 @@ func TestListTrades_ReturnsTrades(t *testing.T) {
 	assert.Equal(t, "t2", resp.Trades[1].Id)
 }
 
-func TestListTrades_OpenOnlyFilter(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-	fake := &fakeTradeReader{
-		trades: []domain.Trade{
-			makeTestTrade("open1", "acc1", "SPY", nil),
-			makeTestTrade("closed1", "acc1", "SPY", &now),
-		},
-	}
-	h := grpchandler.NewTradeHandler(fake, testLogger)
-
-	resp, err := h.ListTrades(context.Background(), &pb.ListTradesRequest{
-		AccountId: "acc1",
-		OpenOnly:  true,
-	})
-	require.NoError(t, err)
-	require.Len(t, resp.Trades, 1)
-	assert.Equal(t, "open1", resp.Trades[0].Id)
-}
-
 func TestListTrades_SymbolFilter(t *testing.T) {
 	fake := &fakeTradeReader{
 		trades: []domain.Trade{
-			makeTestTrade("t1", "acc1", "SPY", nil),
-			makeTestTrade("t2", "acc1", "AAPL", nil),
+			makeTestTrade("t1", "acc1", "SPY"),
+			makeTestTrade("t2", "acc1", "AAPL"),
 		},
 	}
 	h := grpchandler.NewTradeHandler(fake, testLogger)
@@ -174,7 +136,7 @@ func TestGetTrade_Found(t *testing.T) {
 		Broker:           "tastytrade",
 		StrategyType:     domain.StrategySingle,
 		UnderlyingSymbol: "SPY",
-		OpenedAt:         time.Now().UTC().Truncate(time.Second),
+		ExecutedAt:       time.Now().UTC().Truncate(time.Second),
 		Transactions: []domain.Transaction{
 			{
 				ID:        "tx1",
@@ -221,7 +183,7 @@ func TestGetTrade_NotFound(t *testing.T) {
 }
 
 func TestGetTrade_WrongAccount(t *testing.T) {
-	trade := makeTestTrade("t1", "acc1", "SPY", nil)
+	trade := makeTestTrade("t1", "acc1", "SPY")
 	h := grpchandler.NewTradeHandler(&fakeTradeReader{trades: []domain.Trade{trade}}, testLogger)
 
 	_, err := h.GetTrade(context.Background(), &pb.GetTradeRequest{AccountId: "other-acc", Id: "t1"})

@@ -28,9 +28,9 @@ func NewChainRepository(db *sql.DB) repository.ChainRepository {
 func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error {
 	s := model.ChainToStorage(*chain)
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO chains (id, account_id, underlying_symbol, original_trade_id, created_at, closed_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		s.ID, s.AccountID, s.UnderlyingSymbol, s.OriginalTradeID, s.CreatedAt, s.ClosedAt,
+		`INSERT INTO chains (id, account_id, underlying_symbol, original_trade_id, created_at, closed_at, attribution_gap)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.AccountID, s.UnderlyingSymbol, s.OriginalTradeID, s.CreatedAt, s.ClosedAt, s.AttributionGap,
 	)
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -46,9 +46,9 @@ func (r *chainRepo) CreateChain(ctx context.Context, chain *domain.Chain) error 
 func (r *chainRepo) GetChainByID(ctx context.Context, id string) (*domain.Chain, error) {
 	var s model.Chain
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at
+		`SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at, attribution_gap
 		 FROM chains WHERE id = ?`, id,
-	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt)
+	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt, &s.AttributionGap)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -80,21 +80,21 @@ func (r *chainRepo) GetChainByTradeID(ctx context.Context, tradeID string) (*dom
 		// closing_trade_id and opening_trade_id, so the same chain row must not
 		// appear twice.
 		// args: tradeID (original_trade_id), tradeID (closing_trade_id), tradeID (opening_trade_id)
-		`SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at
+		`SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at, attribution_gap
 		 FROM chains WHERE original_trade_id = ?
 		 UNION
-		 SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at
+		 SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at, c.attribution_gap
 		 FROM chains c
 		 JOIN chain_links cl ON cl.chain_id = c.id
 		 WHERE cl.closing_trade_id = ?
 		 UNION
-		 SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at
+		 SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at, c.attribution_gap
 		 FROM chains c
 		 JOIN chain_links cl ON cl.chain_id = c.id
 		 WHERE cl.opening_trade_id = ?
 		 LIMIT 1`,
 		tradeID, tradeID, tradeID,
-	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt)
+	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt, &s.AttributionGap)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -111,7 +111,7 @@ func (r *chainRepo) GetChainByTradeID(ctx context.Context, tradeID string) (*dom
 // ListChainsByAccount retrieves chains for an account with optional filtering for open chains.
 // Links are not loaded; use GetChainByID for full chain detail.
 func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error) {
-	query := `SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at
+	query := `SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at, attribution_gap
 	          FROM chains WHERE account_id = ?`
 	if openOnly {
 		query += ` AND closed_at IS NULL`
@@ -127,7 +127,7 @@ func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, o
 	var chains []domain.Chain
 	for rows.Next() {
 		var s model.Chain
-		if err := rows.Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt, &s.AttributionGap); err != nil {
 			return nil, fmt.Errorf("scan chain: %w", err)
 		}
 		chain, err := s.ToDomain()
@@ -180,7 +180,7 @@ func (r *chainRepo) GetOpenChainForInstrument(ctx context.Context, accountID, in
 		// ORDER BY created_at ASC: when multiple open chains hold the same
 		// instrument, attribute to the oldest (first-opened) chain.
 		// args: accountID, instrumentID
-		`SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at
+		`SELECT c.id, c.account_id, c.underlying_symbol, c.original_trade_id, c.created_at, c.closed_at, c.attribution_gap
 		 FROM chains c
 		 WHERE c.account_id = ?
 		   AND c.closed_at IS NULL
@@ -203,7 +203,7 @@ func (r *chainRepo) GetOpenChainForInstrument(ctx context.Context, accountID, in
 		 ORDER BY c.created_at ASC
 		 LIMIT 1`,
 		accountID, instrumentID,
-	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt)
+	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt, &s.AttributionGap)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound

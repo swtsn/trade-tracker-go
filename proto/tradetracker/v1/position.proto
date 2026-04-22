@@ -34,6 +34,9 @@ message Position {
   google.protobuf.Timestamp opened_at = 8;
   // closed_at is unset when the position is still open.
   google.protobuf.Timestamp closed_at = 9;
+  // chain_attribution_gap mirrors chains.attribution_gap for this position's chain.
+  // True when the chain was started from a mixed trade with unattributed closing P&L.
+  bool chain_attribution_gap = 10;
 }
 
 message ListPositionsRequest {

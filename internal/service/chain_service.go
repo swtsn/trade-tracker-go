@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -58,10 +58,10 @@ func (s *ChainService) DetectChains(ctx context.Context, accountID string) error
 	// try to attribute to them. SliceStable + secondary sort by ID ensures deterministic
 	// ordering when two trades share the same timestamp.
 	sort.SliceStable(trades, func(i, j int) bool {
-		if trades[i].OpenedAt.Equal(trades[j].OpenedAt) {
+		if trades[i].ExecutedAt.Equal(trades[j].ExecutedAt) {
 			return trades[i].ID < trades[j].ID
 		}
-		return trades[i].OpenedAt.Before(trades[j].OpenedAt)
+		return trades[i].ExecutedAt.Before(trades[j].ExecutedAt)
 	})
 
 	for i := range trades {
@@ -207,7 +207,7 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 		if !hasOpening {
 			return "", nil // neutral-only trade (e.g. dividend); nothing to chain
 		}
-		return s.startChain(ctx, trade, txns)
+		return s.startChain(ctx, trade, txns, false)
 	}
 
 	chainID, err := s.attributeChain(ctx, txns)
@@ -223,13 +223,12 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 			// This is expected on first imports that start mid-history: the original
 			// opening trade was never imported, so there is no chain to attribute to.
 			// Start a new chain from this trade so the opening legs are not orphaned.
-			// WARNING: the closing legs' P&L is unattributed and will not appear in
-			// chain analytics. Manual chain stitching or a re-run of DetectChains
-			// after importing earlier history is required to repair this.
-			log.Printf("WARNING chain service: trade %s is mixed (close+open) but no open chain found for closing legs; starting new chain from opening legs — closing P&L unattributed", trade.ID)
-			// trade.ID is mixed (has closing legs); chain OriginalTradeID will point at a mixed
-			// trade rather than the usual opening-only trade. See future.md for repair paths.
-			return s.startChain(ctx, trade, txns)
+			// The closing legs' P&L is unattributed; chain.AttributionGap flags this.
+			// Manual chain stitching or a re-run of DetectChains after importing
+			// earlier history is required to repair this.
+			slog.Warn("chain service: mixed trade has no open chain for closing legs; starting new chain — closing P&L unattributed",
+				"trade_id", trade.ID)
+			return s.startChain(ctx, trade, txns, true)
 		}
 		return "", err
 	}
@@ -240,8 +239,10 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 	return s.maybeCloseChain(ctx, trade, txns, chainID)
 }
 
-// startChain creates a new Chain for an opening-only trade and returns the new chain ID.
-func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) (string, error) {
+// startChain creates a new Chain for an opening trade and returns the new chain ID.
+// attributionGap should be true when the trade also has closing legs that could not be
+// attributed to an existing open chain.
+func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, attributionGap bool) (string, error) {
 	chainID, err := uuid.NewV7()
 	if err != nil {
 		return "", fmt.Errorf("generate chain id: %w", err)
@@ -251,7 +252,8 @@ func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns
 		AccountID:        trade.AccountID,
 		UnderlyingSymbol: underlyingSymbol(txns),
 		OriginalTradeID:  trade.ID,
-		CreatedAt:        trade.OpenedAt,
+		CreatedAt:        trade.ExecutedAt,
+		AttributionGap:   attributionGap,
 	}
 	if err := s.chains.CreateChain(ctx, chain); err != nil {
 		return "", fmt.Errorf("start chain: %w", err)
@@ -277,7 +279,7 @@ func (s *ChainService) extendChain(ctx context.Context, trade *domain.Trade, txn
 		LinkType:         detectLinkType(txns),
 		ClosingTradeID:   trade.ID,
 		OpeningTradeID:   trade.ID,
-		LinkedAt:         trade.OpenedAt,
+		LinkedAt:         trade.ExecutedAt,
 		StrikeChange:     strikeChange,
 		ExpirationChange: expirationChange,
 		CreditDebit:      computeCreditDebit(txns),
@@ -307,7 +309,7 @@ func (s *ChainService) maybeCloseChain(ctx context.Context, trade *domain.Trade,
 		LinkType:       domain.LinkTypeClose,
 		ClosingTradeID: trade.ID,
 		OpeningTradeID: trade.ID, // NOT NULL in schema; set to same for terminal links
-		LinkedAt:       trade.OpenedAt,
+		LinkedAt:       trade.ExecutedAt,
 		CreditDebit:    computeCreditDebit(txns),
 	}
 	if err := s.chains.CreateChainLink(ctx, link); err != nil {
@@ -321,7 +323,7 @@ func (s *ChainService) maybeCloseChain(ctx context.Context, trade *domain.Trade,
 	if hasOpen {
 		return chainID, nil
 	}
-	if err := s.chains.UpdateChainClosed(ctx, chainID, trade.OpenedAt); err != nil {
+	if err := s.chains.UpdateChainClosed(ctx, chainID, trade.ExecutedAt); err != nil {
 		return "", fmt.Errorf("mark chain closed: %w", err)
 	}
 	return chainID, nil

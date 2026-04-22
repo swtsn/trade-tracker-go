@@ -28,9 +28,9 @@ func NewTradeRepository(db *sql.DB, txns repository.TransactionRepository) repos
 func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 	s := model.TradeToStorage(*trade, time.Now())
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO trades (id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.AccountID, s.Broker, s.StrategyType, s.UnderlyingSymbol, s.OpenedAt, s.ClosedAt, s.Notes, s.CreatedAt,
+		`INSERT INTO trades (id, account_id, broker, strategy_type, underlying_symbol, executed_at, notes, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.AccountID, s.Broker, s.StrategyType, s.UnderlyingSymbol, s.ExecutedAt, s.Notes, s.CreatedAt,
 	)
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -46,9 +46,9 @@ func (r *tradeRepo) Create(ctx context.Context, trade *domain.Trade) error {
 func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, error) {
 	var s model.Trade
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
+		`SELECT id, account_id, broker, strategy_type, underlying_symbol, executed_at, notes, created_at
 		 FROM trades WHERE id = ?`, id,
-	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt)
+	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.ExecutedAt, &s.Notes, &s.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -75,9 +75,9 @@ func (r *tradeRepo) GetByID(ctx context.Context, id string) (*domain.Trade, erro
 func (r *tradeRepo) GetByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Trade, error) {
 	var s model.Trade
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
+		`SELECT id, account_id, broker, strategy_type, underlying_symbol, executed_at, notes, created_at
 		 FROM trades WHERE id = ? AND account_id = ?`, id, accountID,
-	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt)
+	).Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.ExecutedAt, &s.Notes, &s.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -99,20 +99,10 @@ func (r *tradeRepo) GetByIDAndAccount(ctx context.Context, accountID, id string)
 // ListByAccount retrieves trades for an account with optional filtering and pagination.
 // Returns both the matching trades and the total count of trades satisfying the filters.
 // Transactions are not loaded; use GetByID for full trade detail.
-// Returns an error if OpenOnly and ClosedOnly are both true.
 func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts repository.ListTradesOptions) ([]domain.Trade, int, error) {
-	if opts.OpenOnly && opts.ClosedOnly {
-		return nil, 0, fmt.Errorf("ListTradesOptions: OpenOnly and ClosedOnly are mutually exclusive")
-	}
-
 	// Build WHERE clause.
 	where := `WHERE account_id = ?`
 	args := []any{accountID}
-	if opts.OpenOnly {
-		where += ` AND closed_at IS NULL`
-	} else if opts.ClosedOnly {
-		where += ` AND closed_at IS NOT NULL`
-	}
 	if opts.Symbol != "" {
 		where += ` AND underlying_symbol = ?`
 		args = append(args, opts.Symbol)
@@ -121,13 +111,13 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 		where += ` AND strategy_type = ?`
 		args = append(args, string(opts.StrategyType))
 	}
-	if !opts.OpenedAfter.IsZero() {
-		where += ` AND opened_at >= ?`
-		args = append(args, opts.OpenedAfter.UTC().Format(time.RFC3339))
+	if !opts.ExecutedAfter.IsZero() {
+		where += ` AND executed_at >= ?`
+		args = append(args, opts.ExecutedAfter.UTC().Format(time.RFC3339))
 	}
-	if !opts.OpenedBefore.IsZero() {
-		where += ` AND opened_at <= ?`
-		args = append(args, opts.OpenedBefore.UTC().Format(time.RFC3339))
+	if !opts.ExecutedBefore.IsZero() {
+		where += ` AND executed_at <= ?`
+		args = append(args, opts.ExecutedBefore.UTC().Format(time.RFC3339))
 	}
 
 	// Total count.
@@ -137,8 +127,8 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	}
 
 	// Paginated query.
-	query := `SELECT id, account_id, broker, strategy_type, underlying_symbol, opened_at, closed_at, notes, created_at
-	          FROM trades ` + where + ` ORDER BY opened_at DESC, id DESC`
+	query := `SELECT id, account_id, broker, strategy_type, underlying_symbol, executed_at, notes, created_at
+	          FROM trades ` + where + ` ORDER BY executed_at DESC, id DESC`
 	if opts.Limit > 0 {
 		query += ` LIMIT ? OFFSET ?`
 		args = append(args, opts.Limit, opts.Offset)
@@ -153,7 +143,7 @@ func (r *tradeRepo) ListByAccount(ctx context.Context, accountID string, opts re
 	var trades []domain.Trade
 	for rows.Next() {
 		var s model.Trade
-		if err := rows.Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.OpenedAt, &s.ClosedAt, &s.Notes, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.AccountID, &s.Broker, &s.StrategyType, &s.UnderlyingSymbol, &s.ExecutedAt, &s.Notes, &s.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan trade: %w", err)
 		}
 		trade, err := s.ToDomain()
@@ -199,18 +189,6 @@ func (r *tradeRepo) UpdateStrategy(ctx context.Context, id string, strategy doma
 		`UPDATE trades SET strategy_type = ? WHERE id = ?`, string(strategy), id)
 	if err != nil {
 		return fmt.Errorf("update trade strategy: %w", err)
-	}
-	return requireOneRow(res, "trade", id)
-}
-
-// UpdateClosedAt updates the closed_at timestamp of a trade.
-// Returns domain.ErrNotFound if the trade does not exist.
-func (r *tradeRepo) UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE trades SET closed_at = ? WHERE id = ?`,
-		closedAt.UTC().Format(time.RFC3339), id)
-	if err != nil {
-		return fmt.Errorf("update trade closed_at: %w", err)
 	}
 	return requireOneRow(res, "trade", id)
 }

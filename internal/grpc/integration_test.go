@@ -272,3 +272,51 @@ func TestIntegration_SmokeTest(t *testing.T) {
 		assert.Equal(t, int32(0), resp.PositionsClosed)
 	})
 }
+
+// mixedUnattributableCSV is a roll with a BTC leg for a put that was never imported —
+// the closing leg has no matching open chain, triggering attribution_gap on the new chain.
+// Both rows share Order # ORD002001 so the parser groups them into one trade.
+const mixedUnattributableCSV = "Date,Type,Sub Type,Action,Symbol,Instrument Type,Description,Value,Quantity,Average Price,Commissions,Fees,Multiplier,Root Symbol,Underlying Symbol,Expiration Date,Strike Price,Call or Put,Order #,Total,Currency\n" +
+	"2024-03-15T10:00:00-0500,Trade,Buy to Close,BUY_TO_CLOSE,SPY   240419P00490000,Equity Option,Bought 1 SPY Put @ 2.00,-200.00,1,2.00,0.00,-0.10,100,SPY,SPY,4/19/24,490,PUT,ORD002001,-200.10,USD\n" +
+	"2024-03-15T10:00:01-0500,Trade,Sell to Open,SELL_TO_OPEN,SPY   240621P00480000,Equity Option,Sold 1 SPY Put @ 3.00,300.00,1,3.00,0.00,-0.10,100,SPY,SPY,6/21/24,480,PUT,ORD002001,299.90,USD\n"
+
+// TestIntegration_AttributionGap verifies that a mixed trade (close+open) with no prior
+// open chain sets attribution_gap = true on the newly created chain, and that the flag
+// propagates through the full gRPC write-read path.
+func TestIntegration_AttributionGap(t *testing.T) {
+	ctx := context.Background()
+	s := startSmokeServer(t)
+
+	resp, err := s.account.CreateAccount(ctx, &pb.CreateAccountRequest{
+		Broker:        "tastytrade",
+		AccountNumber: "GAP001",
+		Name:          "Attribution Gap Test",
+	})
+	require.NoError(t, err)
+	accID := resp.Account.Id
+
+	stream, err := s.importer.ImportTransactions(ctx, &pb.ImportTransactionsRequest{
+		AccountId: accID,
+		Broker:    pb.Broker_BROKER_TASTYTRADE,
+		CsvData:   []byte(mixedUnattributableCSV),
+	})
+	require.NoError(t, err)
+	importResp, err := stream.Recv()
+	require.NoError(t, err)
+	assert.Equal(t, uint32(1), importResp.Imported) // two CSV rows → one grouped trade
+
+	posResp, err := s.positions.ListPositions(ctx, &pb.ListPositionsRequest{
+		AccountId: accID,
+		Status:    pb.PositionStatus_POSITION_STATUS_OPEN,
+	})
+	require.NoError(t, err)
+	require.Len(t, posResp.Positions, 1)
+	assert.True(t, posResp.Positions[0].ChainAttributionGap, "position must reflect chain attribution_gap")
+
+	chainResp, err := s.chains.GetChain(ctx, &pb.GetChainRequest{
+		AccountId: accID,
+		Id:        posResp.Positions[0].ChainId,
+	})
+	require.NoError(t, err)
+	assert.True(t, chainResp.Chain.AttributionGap, "chain must have attribution_gap set")
+}

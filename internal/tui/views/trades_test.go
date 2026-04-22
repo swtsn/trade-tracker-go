@@ -21,7 +21,7 @@ func TestTradesView_Load(t *testing.T) {
 					Id:               "t1",
 					UnderlyingSymbol: "SPY",
 					StrategyType:     pb.StrategyType_STRATEGY_TYPE_VERTICAL,
-					OpenedAt:         timestamppb.Now(),
+					ExecutedAt:       timestamppb.Now(),
 				},
 			},
 		},
@@ -47,8 +47,8 @@ func TestTradesView_SymbolFilterRoundTrip(t *testing.T) {
 	fake := &client.Fake{
 		Trades: map[string][]*pb.Trade{
 			"acc1": {
-				{Id: "t1", UnderlyingSymbol: "SPY", OpenedAt: timestamppb.Now()},
-				{Id: "t2", UnderlyingSymbol: "AAPL", OpenedAt: timestamppb.Now()},
+				{Id: "t1", UnderlyingSymbol: "SPY", ExecutedAt: timestamppb.Now()},
+				{Id: "t2", UnderlyingSymbol: "AAPL", ExecutedAt: timestamppb.Now()},
 			},
 		},
 	}
@@ -106,8 +106,8 @@ func TestTradesView_InputActiveWhileFilterOpen(t *testing.T) {
 func TestTradesView_AllAccountsFansOut(t *testing.T) {
 	fake := &client.Fake{
 		Trades: map[string][]*pb.Trade{
-			"acc1": {{Id: "t1", UnderlyingSymbol: "SPY", OpenedAt: timestamppb.Now()}},
-			"acc2": {{Id: "t2", UnderlyingSymbol: "TSLA", OpenedAt: timestamppb.Now()}},
+			"acc1": {{Id: "t1", UnderlyingSymbol: "SPY", ExecutedAt: timestamppb.Now()}},
+			"acc2": {{Id: "t2", UnderlyingSymbol: "TSLA", ExecutedAt: timestamppb.Now()}},
 		},
 	}
 

@@ -236,7 +236,7 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 // buildTrade constructs a domain.Trade from a group of transactions.
 // AccountID, Broker, and UnderlyingSymbol are taken from the first transaction (all legs
 // share them). UnderlyingSymbol prefers the first opening leg; falls back to txs[0].
-// OpenedAt is the earliest ExecutedAt across the group.
+// ExecutedAt is the earliest ExecutedAt across the group.
 // txs must not be empty.
 func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.StrategyType) *domain.Trade {
 	if len(txs) == 0 {
@@ -254,7 +254,7 @@ func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.St
 		Broker:           txs[0].Broker,
 		StrategyType:     strategyType,
 		UnderlyingSymbol: underlyingSymbol(txs),
-		OpenedAt:         earliest,
+		ExecutedAt:       earliest,
 	}
 }
 
