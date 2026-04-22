@@ -12,7 +12,7 @@
       "Bash(buf:*)",
       "Bash(grep:*)",
       "Bash(git add:*)",
-      "Bash(~/go/bin/buf generate:*)"
+      "Bash(find /root/go/pkg/mod/github.com/charmbracelet/bubbles* -name \"table.go\")"
     ]
   }
 }

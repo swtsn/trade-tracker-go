@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/filepicker"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -27,12 +27,11 @@ type ImportDoneMsg struct {
 type importStep int
 
 const (
-	stepIdle importStep = iota
-	stepPath
-	stepBroker
-	stepConfirm
-	stepRunning
-	stepDone
+	stepIdle       importStep = iota
+	stepFilePicker            // user browses and selects a CSV file
+	stepConfirm               // user reviews account + file + broker before running
+	stepRunning               // import in progress
+	stepDone                  // import finished (success or error)
 )
 
 // maxImportFileBytes is the upper bound for CSV files accepted by the import flow.
@@ -42,42 +41,37 @@ const maxImportFileBytes = 50 << 20 // 50 MiB
 type ImportView struct {
 	client               client.Client
 	step                 importStep
-	pathInput            textinput.Model
+	fp                   filepicker.Model
+	baseDir              string // starting directory for the file picker; defaults to os.Getwd()
 	csvPath              string
-	broker               pb.Broker // selected broker
-	accountID            string    // captured at stepConfirm entry
-	blockedByAllAccounts bool      // set when user tries to start with All Accounts active
+	accountLabel         string // display label captured at confirm entry
+	accountBroker        string // broker string from the selected account
+	blockedByAllAccounts bool   // set when user tries to start with All Accounts active
 	result               *ImportDoneMsg
 	width                int
 	height               int
-}
-
-var brokers = []struct {
-	label string
-	value pb.Broker
-}{
-	{"Tastytrade", pb.Broker_BROKER_TASTYTRADE},
-	{"Schwab", pb.Broker_BROKER_SCHWAB},
 }
 
 var (
 	importTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
 	importDimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	importWarningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	importBrokerCursor = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▶ ")
 )
 
 func NewImportView(c client.Client) ImportView {
-	ti := textinput.New()
-	ti.Placeholder = "/path/to/transactions.csv"
-	ti.CharLimit = 256
-	return ImportView{client: c, pathInput: ti}
+	return ImportView{client: c}
+}
+
+// NewImportViewAt creates an ImportView where the file picker starts in dir.
+// Intended for testing; production code should use NewImportView.
+func NewImportViewAt(c client.Client, dir string) ImportView {
+	return ImportView{client: c, baseDir: dir}
 }
 
 // InputActive reports whether the view is currently capturing keyboard input.
 // When true, the root app must not intercept global hotkeys.
 func (v ImportView) InputActive() bool {
-	return v.step == stepPath || v.step == stepRunning
+	return v.step == stepFilePicker || v.step == stepRunning
 }
 
 func (v ImportView) Update(msg tea.Msg, state SharedState) (ImportView, tea.Cmd) {
@@ -94,6 +88,13 @@ func (v ImportView) Update(msg tea.Msg, state SharedState) (ImportView, tea.Cmd)
 	case tea.KeyMsg:
 		return v.handleKey(msg, state)
 	}
+
+	// Pass non-key messages to the filepicker (e.g. the internal readDirMsg).
+	if v.step == stepFilePicker {
+		var cmd tea.Cmd
+		v.fp, cmd = v.fp.Update(msg)
+		return v, cmd
+	}
 	return v, nil
 }
 
@@ -106,49 +107,37 @@ func (v ImportView) handleKey(msg tea.KeyMsg, state SharedState) (ImportView, te
 				return v, nil
 			}
 			v.blockedByAllAccounts = false
-			v.step = stepPath
-			v.pathInput.SetValue("")
-			v.pathInput.Focus()
-			return v, textinput.Blink
+			v.step = stepFilePicker
+			v.fp = v.newFilePicker(v.height - 4)
+			return v, v.fp.Init()
 		}
 
-	case stepPath:
-		switch msg.String() {
-		case "esc":
+	case stepFilePicker:
+		// Esc cancels the picker and returns to idle; all other keys go to the filepicker.
+		if msg.String() == "esc" {
 			v.step = stepIdle
-			v.pathInput.Blur()
-		case "enter":
-			v.csvPath = strings.TrimSpace(v.pathInput.Value())
-			if v.csvPath != "" {
-				v.pathInput.Blur()
-				v.step = stepBroker
-				v.broker = pb.Broker_BROKER_TASTYTRADE
+			return v, nil
+		}
+		var cmd tea.Cmd
+		v.fp, cmd = v.fp.Update(msg)
+		if ok, path := v.fp.DidSelectFile(msg); ok {
+			v.csvPath = path
+			if acc := state.SelectedAccount(); acc != nil {
+				v.accountLabel = AccountLabel(acc)
+				v.accountBroker = acc.Broker
+			} else {
+				v.accountLabel = state.SelectedAccountID
+				v.accountBroker = ""
 			}
-		default:
-			var cmd tea.Cmd
-			v.pathInput, cmd = v.pathInput.Update(msg)
-			return v, cmd
-		}
-
-	case stepBroker:
-		switch msg.String() {
-		case "esc":
-			v.step = stepPath
-			v.pathInput.Focus()
-			return v, textinput.Blink
-		case "enter":
-			v.accountID = state.SelectedAccountID
 			v.step = stepConfirm
-		case "up", "k":
-			v.prevBroker()
-		case "down", "j":
-			v.nextBroker()
 		}
+		return v, cmd
 
 	case stepConfirm:
 		switch msg.String() {
 		case "esc":
-			v.step = stepBroker
+			v.step = stepFilePicker
+			return v, nil
 		case "enter", "y":
 			v.step = stepRunning
 			return v, v.runImport(state)
@@ -180,47 +169,24 @@ func (v ImportView) View() string {
 		}
 		return strings.Join(lines, "\n")
 
-	case stepPath:
+	case stepFilePicker:
 		return strings.Join([]string{
-			importTitleStyle.Render("CSV Import — File Path"),
+			importTitleStyle.Render("CSV Import — Select File"),
+			importDimStyle.Render(v.fp.CurrentDirectory),
 			"",
-			"Enter the path to the CSV file:",
-			v.pathInput.View(),
-			"",
-			importDimStyle.Render("Enter to confirm  Esc to cancel"),
+			v.fp.View(),
+			importDimStyle.Render("↑↓/jk navigate  l/→/Enter open  h/←/Bksp go up  Enter select  Esc cancel"),
 		}, "\n")
 
-	case stepBroker:
-		lines := []string{
-			importTitleStyle.Render("CSV Import — Broker"),
-			"",
-			"Select broker:",
-		}
-		for _, b := range brokers {
-			prefix := "  "
-			if b.value == v.broker {
-				prefix = importBrokerCursor
-			}
-			lines = append(lines, prefix+b.label)
-		}
-		lines = append(lines, "", importDimStyle.Render("↑↓ to select  Enter to confirm  Esc to go back"))
-		return strings.Join(lines, "\n")
-
 	case stepConfirm:
-		brokerLabel := "—"
-		for _, b := range brokers {
-			if b.value == v.broker {
-				brokerLabel = b.label
-			}
-		}
 		return strings.Join([]string{
 			importTitleStyle.Render("CSV Import — Confirm"),
 			"",
-			fmt.Sprintf("  Account: %s", v.accountID),
+			fmt.Sprintf("  Account: %s", v.accountLabel),
+			fmt.Sprintf("  Broker:  %s", v.accountBroker),
 			fmt.Sprintf("  File:    %s", v.csvPath),
-			fmt.Sprintf("  Broker:  %s", brokerLabel),
 			"",
-			importWarningStyle.Render("Press Enter or 'y' to import, 'n' or Esc to cancel."),
+			importWarningStyle.Render("Press Enter or 'y' to import, 'n' or Esc to go back."),
 		}, "\n")
 
 	case stepRunning:
@@ -261,30 +227,46 @@ func (v ImportView) View() string {
 func (v *ImportView) Resize(w, h int) {
 	v.width = w
 	v.height = h
+	v.fp.SetHeight(h - 4)
 }
 
-func (v *ImportView) nextBroker() {
-	for i, b := range brokers {
-		if b.value == v.broker {
-			v.broker = brokers[(i+1)%len(brokers)].value
-			return
+// newFilePicker creates a filepicker filtered to .csv files.
+// It starts in v.baseDir if set, otherwise the working directory.
+func (v ImportView) newFilePicker(height int) filepicker.Model {
+	fp := filepicker.New()
+	fp.AllowedTypes = []string{".csv"}
+	fp.ShowPermissions = false
+	fp.AutoHeight = false
+	fp.SetHeight(height)
+	dir := v.baseDir
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			dir = "."
 		}
 	}
+	fp.CurrentDirectory = dir
+	return fp
 }
 
-func (v *ImportView) prevBroker() {
-	for i, b := range brokers {
-		if b.value == v.broker {
-			v.broker = brokers[(i-1+len(brokers))%len(brokers)].value
-			return
-		}
+// brokerEnum maps an account broker string (e.g. "tastytrade") to the import enum.
+// Returns BROKER_UNSPECIFIED for unrecognised values; the server will reject the import.
+func brokerEnum(s string) pb.Broker {
+	switch strings.ToLower(s) {
+	case "tastytrade":
+		return pb.Broker_BROKER_TASTYTRADE
+	case "schwab":
+		return pb.Broker_BROKER_SCHWAB
+	default:
+		return pb.Broker_BROKER_UNSPECIFIED
 	}
 }
 
 func (v ImportView) runImport(state SharedState) tea.Cmd {
 	c := v.client
 	path := v.csvPath
-	broker := v.broker
+	broker := brokerEnum(v.accountBroker)
 	accountID := state.SelectedAccountID
 	return func() tea.Msg {
 		info, err := os.Stat(path)

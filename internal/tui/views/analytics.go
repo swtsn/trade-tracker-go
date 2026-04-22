@@ -122,9 +122,9 @@ func (v AnalyticsView) load(state SharedState) tea.Cmd {
 
 func buildAnalyticsTable(rows []analyticsRow, w, h int) table.Model {
 	cols := []table.Column{
-		{Title: "Account", Width: 24},
-		{Title: "Realized P&L", Width: 14},
-		{Title: "Close Fees", Width: 12},
+		{Title: "Account", Width: 32},
+		{Title: "Realized P&L", Width: pnlColumnWidth},
+		{Title: "Close Fees", Width: currencyColumnWidth},
 		{Title: "Win Rate", Width: 10},
 		{Title: "Positions Closed", Width: 16},
 	}
@@ -146,7 +146,7 @@ func buildAnalyticsTable(rows []analyticsRow, w, h int) table.Model {
 		if r.summary != nil {
 			winRate = fmt.Sprintf("%.0f%%", parseDecimalOrZero(r.summary.WinRate)*100)
 			realizedPnl = formatPnl(r.summary.RealizedPnl)
-			closeFees = fmt.Sprintf("$%.2f", parseDecimalOrZero(r.summary.CloseFees))
+			closeFees = formatCurrency(r.summary.CloseFees)
 			closedCount = fmt.Sprintf("%d", r.summary.PositionsClosed)
 		}
 		tableRows[i] = table.Row{acctLabel, realizedPnl, closeFees, winRate, closedCount}

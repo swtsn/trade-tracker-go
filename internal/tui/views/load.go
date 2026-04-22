@@ -29,11 +29,22 @@ func (s SharedState) SelectedAccount() *pb.Account {
 }
 
 // AccountLabel returns a display string for the given account.
+// Format: "<nickname> (<broker>-<last4>)" or "(<broker>-<last4>)" if no nickname.
 func AccountLabel(a *pb.Account) string {
+	short := shortAccountNumber(a.AccountNumber)
+	suffix := "(" + a.Broker + "-" + short + ")"
 	if a.Name != "" {
-		return a.Name
+		return a.Name + " " + suffix
 	}
-	return a.Broker + " " + a.AccountNumber
+	return suffix
+}
+
+// shortAccountNumber returns the last 4 characters of n, or n itself if shorter.
+func shortAccountNumber(n string) string {
+	if len(n) > 4 {
+		return n[len(n)-4:]
+	}
+	return n
 }
 
 // LoadMsg is sent to a view when it should (re-)fetch its data.
