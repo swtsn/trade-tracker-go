@@ -79,7 +79,7 @@ func NewAccountsView(c client.Client) AccountsView {
 	numberInput.CharLimit = 64
 
 	nameInput := textinput.New()
-	nameInput.Placeholder = "display name (optional)"
+	nameInput.Placeholder = "nickname (optional)"
 	nameInput.CharLimit = 128
 
 	return AccountsView{
@@ -94,10 +94,7 @@ func NewAccountsView(c client.Client) AccountsView {
 // InputActive reports true when a text input is focused so the root app
 // suppresses global hotkeys.
 func (v AccountsView) InputActive() bool {
-	return v.step == accountStepCreateBroker ||
-		v.step == accountStepCreateNumber ||
-		v.step == accountStepCreateName ||
-		v.step == accountStepRename
+	return v.step != accountStepIdle
 }
 
 func (v AccountsView) Update(msg tea.Msg, state SharedState) (AccountsView, tea.Cmd) {
@@ -283,9 +280,9 @@ func (v AccountsView) View() string {
 
 	case accountStepCreateName:
 		return strings.Join([]string{
-			accountTitleStyle.Render("New Account — Display Name"),
+			accountTitleStyle.Render("New Account — Nickname"),
 			"",
-			"Display name (optional, press Enter to skip):",
+			"Nickname (optional, press Enter to skip):",
 			v.nameInput.View(),
 			"",
 			accountDimStyle.Render("Enter to confirm  Esc to go back"),
@@ -312,7 +309,7 @@ func (v AccountsView) View() string {
 			accountTitleStyle.Render("Rename Account"),
 			"",
 			fmt.Sprintf("Account: %s", label),
-			"New display name:",
+			"New nickname:",
 			v.nameInput.View(),
 			"",
 			accountDimStyle.Render("Enter to save  Esc to cancel"),
@@ -420,8 +417,7 @@ func (v AccountsView) runRename(id, name string) tea.Cmd {
 
 func buildAccountsTable(rows []accountSummaryRow, w, h int) table.Model {
 	cols := []table.Column{
-		{Title: "Account", Width: 24},
-		{Title: "Broker", Width: 14},
+		{Title: "Account", Width: 32},
 		{Title: "Realized P&L (YTD)", Width: 20},
 		{Title: "Win Rate", Width: 10},
 		{Title: "Closed", Width: 8},
@@ -431,7 +427,7 @@ func buildAccountsTable(rows []accountSummaryRow, w, h int) table.Model {
 	for i, r := range rows {
 		acctLabel := AccountLabel(r.account)
 		if r.err != nil {
-			tableRows[i] = table.Row{acctLabel, r.account.Broker, "—", "—", "—"}
+			tableRows[i] = table.Row{acctLabel, "—", "—", "—"}
 			continue
 		}
 		winRate := "—"
@@ -444,7 +440,7 @@ func buildAccountsTable(rows []accountSummaryRow, w, h int) table.Model {
 			realizedPnl = formatPnl(r.summary.RealizedPnl)
 			closedCount = fmt.Sprintf("%d", r.summary.PositionsClosed)
 		}
-		tableRows[i] = table.Row{acctLabel, r.account.Broker, realizedPnl, winRate, closedCount}
+		tableRows[i] = table.Row{acctLabel, realizedPnl, winRate, closedCount}
 	}
 
 	t := table.New(

@@ -97,7 +97,7 @@ func TestAccountsView_CreateFlow(t *testing.T) {
 		v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}, state)
 	}
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state)
-	assert.Contains(t, v.View(), "Display Name")
+	assert.Contains(t, v.View(), "Nickname")
 
 	// Skip name and advance to confirm.
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state)

@@ -104,11 +104,11 @@ func buildPositionsTable(positions []*pb.Position, w, h int, showOpen bool) tabl
 	cols := []table.Column{
 		{Title: "Symbol", Width: 10},
 		{Title: "Strategy", Width: 10},
-		{Title: "Cost Basis", Width: 12},
+		{Title: "Cost Basis", Width: pnlColumnWidth},
 		{Title: "Opened", Width: 12},
 	}
 	if !showOpen {
-		cols = append(cols, table.Column{Title: "Realized P&L", Width: 14})
+		cols = append(cols, table.Column{Title: "Realized P&L", Width: pnlColumnWidth})
 		cols = append(cols, table.Column{Title: "Closed", Width: 12})
 	}
 

@@ -23,8 +23,8 @@ type accountsLoadedMsg struct {
 
 var (
 	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4"))
-	tabInactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	tabSepStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	tabInactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Background(lipgloss.Color("0"))
+	tabSepStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Background(lipgloss.Color("0"))
 	headerBGStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0"))
 	headerSepStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
@@ -285,6 +285,8 @@ func (a *App) prevAccount() {
 // input (e.g. a text field is focused). Global hotkeys are suppressed in that state.
 func (a *App) activeViewCapturingInput() bool {
 	switch a.activeView {
+	case ViewAccounts:
+		return a.accountsView.InputActive()
 	case ViewTrades:
 		return a.tradesView.InputActive()
 	case ViewImport:

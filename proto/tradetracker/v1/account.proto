@@ -45,7 +45,7 @@ message GetAccountResponse {
 message CreateAccountRequest {
   string broker = 1;
   string account_number = 2;
-  string name = 3; // optional display name
+  string name = 3; // optional nickname
 }
 
 message CreateAccountResponse {

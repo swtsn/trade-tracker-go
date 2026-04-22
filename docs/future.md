@@ -6,6 +6,38 @@ Items explicitly deferred from current phases. Revisit when the core system is s
 
 - **TUI polish** — make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
 
+## Upcoming work items (no phases, ordered by priority)
+
+### 1. Trade open/close status is a data model smell
+
+In the trades view, a trade can appear as "open" or "closed" and can show `?` for status when it represents only closing transactions with no recorded open. This is a model design issue: a **trade** is a one-time grouping of transactions and does not inherently have an open/close state — that concept belongs exclusively on **position**. The current status display is inferred from whether there are closing transactions without a matching open, which is fragile and misleading.
+
+Design and fix this:
+- Remove the open/closed status column from the trades view. Trades should be displayed without a lifecycle status; only positions have that concept.
+- The `?` case arises when a closing trade was imported but no open transaction exists in the log (e.g. history started mid-trade). This is not a trade status but an attribution gap. It should be surfaced differently — possibly as a warning on the chain or position rather than a trade status.
+- Audit the `Trade` proto and domain model: if `opened_at` / `closed_at` are only meaningful for display grouping (not semantics), clarify their meaning in comments. If they're vestigial lifecycle fields, consider removing them from the trade layer.
+- Related: a close-only trade with no open chain currently starts a new orphaned chain. The manual chain-stitching item in Phase 2 / Business Logic (above) covers the recovery path.
+
+### 2. Strategy alignment between trades and positions views
+
+The trades view correctly recognises `STRATEGY_TYPE_STOCK`, but the positions view shows `?` for the same underlying. Strategy type is determined at trade-grouping time and stored on the trade; positions inherit strategy type from the chain. The mismatch suggests that stock (and possibly futures) positions are not being assigned a strategy type when the position is created or updated.
+
+Plan (do not implement yet — needs design):
+- Trace how `strategy_type` flows from transaction → trade → chain → position for stock/equity trades. Identify where it is lost.
+- Note that strategies involving stock or futures contracts may need different handling from pure-options positions: lot quantity semantics differ (shares vs. contracts × multiplier), cost basis meaning differs, and P&L attribution may need separate logic. Any alignment work should not assume parity with options-only strategies.
+- Proposed fix direction: ensure `PositionService` propagates the resolved `strategy_type` from the trade onto the position at creation/update, rather than re-deriving it (which may fail for stock legs that don't match options-oriented classifiers).
+
+### 3. TUI navigation: positions → chain, trades → transactions
+
+Both relationships are tracked in the data model but are not yet surfaced in the TUI:
+- `Position.chain_id` exists and is populated — there is no UI path to view a position's chain or the other positions within it.
+- `Trade.transactions` is populated in `ListTrades` / `GetTrade` responses — there is no UI path to drill into the legs of a trade.
+
+Items:
+- **Positions → chain detail**: from the positions view, pressing Enter (or similar) on a row should open a chain detail view showing all positions in the chain, the chain's P&L, and the chain's timeline.
+- **Trades → transaction legs**: from the trades view, pressing Enter on a row should expand or navigate to a leg view listing each transaction (symbol, action, quantity, fill price, fees, executed_at).
+- Neither requires new API endpoints. `GetChain(account_id, chain_id)` already exists and returns full chain detail including all events and legs. `Trade.transactions` is already embedded in `ListTrades` / `GetTrade` responses. The work is purely in TUI view construction and navigation wiring.
+
 ## Phase 1 / Data Model
 - **Corporate actions** — stock splits, mergers, spin-offs would require lot cost basis adjustments. No schema support yet.
 - **Crypto** — asset class placeholder exists but no broker parsers or instrument handling.

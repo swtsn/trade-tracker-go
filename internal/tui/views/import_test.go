@@ -1,11 +1,15 @@
 package views_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	pb "trade-tracker-go/gen/tradetracker/v1"
 	"trade-tracker-go/internal/tui/client"
 	"trade-tracker-go/internal/tui/views"
 )
@@ -22,10 +26,10 @@ func TestImportView_RequiresSpecificAccount(t *testing.T) {
 
 	rendered := v.View()
 	assert.Contains(t, rendered, "Import")
-	assert.NotContains(t, rendered, "File Path")
+	assert.NotContains(t, rendered, "Select File")
 }
 
-func TestImportView_AdvancesToPathWithSpecificAccount(t *testing.T) {
+func TestImportView_AdvancesToFilePickerWithSpecificAccount(t *testing.T) {
 	fake := &client.Fake{}
 	state := views.SharedState{SelectedAccountID: "acc1"}
 
@@ -33,38 +37,50 @@ func TestImportView_AdvancesToPathWithSpecificAccount(t *testing.T) {
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state)
 
 	rendered := v.View()
-	assert.Contains(t, rendered, "File Path")
+	assert.Contains(t, rendered, "Select File")
 }
 
-func TestImportView_EscapeFromPathGoesIdle(t *testing.T) {
+func TestImportView_EscapeFromFilePickerGoesIdle(t *testing.T) {
 	fake := &client.Fake{}
 	state := views.SharedState{SelectedAccountID: "acc1"}
 
 	v := views.NewImportView(fake)
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state) // → stepPath
+	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state) // → stepFilePicker
 	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEsc}, state)   // → stepIdle
 
 	rendered := v.View()
-	assert.NotContains(t, rendered, "File Path")
+	assert.NotContains(t, rendered, "Select File")
 }
 
-func TestImportView_BrokerStepReached(t *testing.T) {
+func TestImportView_ConfirmStepReached(t *testing.T) {
+	// Create a temp directory with a CSV file so we can simulate file selection.
+	tmpDir := t.TempDir()
+	csvFile := filepath.Join(tmpDir, "trades.csv")
+	require.NoError(t, os.WriteFile(csvFile, []byte("header\n"), 0644))
+
+	account := &pb.Account{Id: "acc1", Broker: "tastytrade", AccountNumber: "12345"}
 	fake := &client.Fake{}
-	state := views.SharedState{SelectedAccountID: "acc1"}
-
-	v := views.NewImportView(fake)
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state) // → stepPath
-
-	// Type a path and press Enter.
-	for _, ch := range "/tmp/test.csv" {
-		v, _ = v.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}}, state)
+	state := views.SharedState{
+		SelectedAccountID: "acc1",
+		Accounts:          []*pb.Account{account},
 	}
-	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state) // → stepBroker
+
+	v := views.NewImportViewAt(fake, tmpDir)
+
+	// Enter the flow; Init() returns a readDir command — run it synchronously.
+	var cmd tea.Cmd
+	v, cmd = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state) // → stepFilePicker
+	require.NotNil(t, cmd)
+	msg := cmd()                // readDir tmpDir
+	v, _ = v.Update(msg, state) // filepicker loads the directory entries
+
+	// Press Enter to select the first (and only) file → stepConfirm.
+	v, _ = v.Update(tea.KeyMsg{Type: tea.KeyEnter}, state)
 
 	rendered := v.View()
-	assert.Contains(t, rendered, "Broker")
-	assert.Contains(t, rendered, "Tastytrade")
-	assert.Contains(t, rendered, "Schwab")
+	assert.Contains(t, rendered, "Confirm")
+	assert.Contains(t, rendered, "tastytrade")
+	assert.Contains(t, rendered, "trades.csv")
 }
 
 func TestImportView_DoneMessageShowsSummary(t *testing.T) {
