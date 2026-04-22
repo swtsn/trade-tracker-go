@@ -29,7 +29,7 @@ func seedPositionTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, a
 		AccountID:    acc.ID,
 		Broker:       acc.Broker,
 		StrategyType: domain.StrategyUnknown,
-		OpenedAt:     openedAt,
+		ExecutedAt:   openedAt,
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
 	for i := range txns {

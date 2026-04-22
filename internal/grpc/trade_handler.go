@@ -31,9 +31,6 @@ func (h *TradeHandler) ListTrades(ctx context.Context, req *pb.ListTradesRequest
 	if req.AccountId == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id is required")
 	}
-	if req.OpenOnly && req.ClosedOnly {
-		return nil, status.Error(codes.InvalidArgument, "open_only and closed_only are mutually exclusive")
-	}
 
 	limit := int(req.PageSize)
 	if limit <= 0 || limit > maxTradePageSize {
@@ -42,16 +39,14 @@ func (h *TradeHandler) ListTrades(ctx context.Context, req *pb.ListTradesRequest
 
 	opts := repository.ListTradesOptions{
 		Limit:        limit,
-		OpenOnly:     req.OpenOnly,
-		ClosedOnly:   req.ClosedOnly,
 		Symbol:       req.Symbol,
 		StrategyType: protoToStrategyType(req.StrategyType),
 	}
-	if req.OpenedAfter != nil {
-		opts.OpenedAfter = req.OpenedAfter.AsTime()
+	if req.ExecutedAfter != nil {
+		opts.ExecutedAfter = req.ExecutedAfter.AsTime()
 	}
-	if req.OpenedBefore != nil {
-		opts.OpenedBefore = req.OpenedBefore.AsTime()
+	if req.ExecutedBefore != nil {
+		opts.ExecutedBefore = req.ExecutedBefore.AsTime()
 	}
 
 	trades, total, err := h.trades.ListByAccountWithTransactions(ctx, req.AccountId, opts)
@@ -90,12 +85,9 @@ func tradeToProto(t *domain.Trade) *pb.Trade {
 		Broker:           t.Broker,
 		StrategyType:     strategyTypeToProto(t.StrategyType),
 		UnderlyingSymbol: t.UnderlyingSymbol,
-		OpenedAt:         timestamppb.New(t.OpenedAt),
+		ExecutedAt:       timestamppb.New(t.ExecutedAt),
 		Notes:            t.Notes,
 		Transactions:     make([]*pb.Transaction, len(t.Transactions)),
-	}
-	if t.ClosedAt != nil {
-		p.ClosedAt = timestamppb.New(*t.ClosedAt)
 	}
 	for i := range t.Transactions {
 		p.Transactions[i] = transactionToProto(&t.Transactions[i])

@@ -9,30 +9,33 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
-// Position holds the flat, SQL-scannable fields for a positions row (migration 009 schema).
-// No instrument join — positions span multiple instruments.
+// Position holds the flat, SQL-scannable fields for a positions row (migration 009 schema)
+// plus chain_attribution_gap joined from chains.
 type Position struct {
-	ID                 string
-	AccountID          string
-	ChainID            sql.NullString
-	OriginatingTradeID string
-	UnderlyingSymbol   string
-	StrategyType       string
-	CostBasis          string
-	RealizedPnL        string
-	OpenedAt           string
-	UpdatedAt          string
-	ClosedAt           sql.NullString
+	ID                  string
+	AccountID           string
+	ChainID             sql.NullString
+	OriginatingTradeID  string
+	UnderlyingSymbol    string
+	StrategyType        string
+	CostBasis           string
+	RealizedPnL         string
+	OpenedAt            string
+	UpdatedAt           string
+	ClosedAt            sql.NullString
+	ChainAttributionGap int // 0 = false, 1 = true; joined from chains
 }
 
 // ScanDest returns pointers matching the SELECT column order:
 // id, account_id, chain_id, originating_trade_id, underlying_symbol,
-// strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at
+// strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at,
+// chain_attribution_gap
 func (r *Position) ScanDest() []any {
 	return []any{
 		&r.ID, &r.AccountID, &r.ChainID, &r.OriginatingTradeID, &r.UnderlyingSymbol,
 		&r.StrategyType, &r.CostBasis, &r.RealizedPnL,
 		&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt,
+		&r.ChainAttributionGap,
 	}
 }
 
@@ -56,16 +59,17 @@ func (r Position) ToDomain() (domain.Position, error) {
 	}
 
 	p := domain.Position{
-		ID:                 r.ID,
-		AccountID:          r.AccountID,
-		ChainID:            r.ChainID.String, // empty string for legacy rows with NULL chain_id
-		OriginatingTradeID: r.OriginatingTradeID,
-		UnderlyingSymbol:   r.UnderlyingSymbol,
-		StrategyType:       domain.StrategyType(r.StrategyType),
-		CostBasis:          costBasis,
-		RealizedPnL:        realizedPnL,
-		OpenedAt:           openedAt,
-		UpdatedAt:          updatedAt,
+		ID:                  r.ID,
+		AccountID:           r.AccountID,
+		ChainID:             r.ChainID.String, // empty string for legacy rows with NULL chain_id
+		OriginatingTradeID:  r.OriginatingTradeID,
+		UnderlyingSymbol:    r.UnderlyingSymbol,
+		StrategyType:        domain.StrategyType(r.StrategyType),
+		CostBasis:           costBasis,
+		RealizedPnL:         realizedPnL,
+		OpenedAt:            openedAt,
+		UpdatedAt:           updatedAt,
+		ChainAttributionGap: r.ChainAttributionGap != 0,
 	}
 	if r.ClosedAt.Valid {
 		t, err := time.Parse(time.RFC3339, r.ClosedAt.String)

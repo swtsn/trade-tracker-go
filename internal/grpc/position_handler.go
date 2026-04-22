@@ -68,13 +68,14 @@ func (h *PositionHandler) GetPosition(ctx context.Context, req *pb.GetPositionRe
 
 func positionToProto(pos *domain.Position) *pb.Position {
 	p := &pb.Position{
-		Id:               pos.ID,
-		AccountId:        pos.AccountID,
-		ChainId:          pos.ChainID,
-		UnderlyingSymbol: pos.UnderlyingSymbol,
-		StrategyType:     strategyTypeToProto(pos.StrategyType),
-		CostBasis:        pos.CostBasis.String(),
-		OpenedAt:         timestamppb.New(pos.OpenedAt),
+		Id:                  pos.ID,
+		AccountId:           pos.AccountID,
+		ChainId:             pos.ChainID,
+		UnderlyingSymbol:    pos.UnderlyingSymbol,
+		StrategyType:        strategyTypeToProto(pos.StrategyType),
+		CostBasis:           pos.CostBasis.String(),
+		OpenedAt:            timestamppb.New(pos.OpenedAt),
+		ChainAttributionGap: pos.ChainAttributionGap,
 	}
 	if pos.ClosedAt != nil {
 		p.ClosedAt = timestamppb.New(*pos.ClosedAt)

@@ -486,6 +486,7 @@ func TestChainService_MixedUnattributableStartsNewChain(t *testing.T) {
 	assert.Empty(t, links, "no chain links — opening legs start the chain, not extend it")
 
 	assert.Nil(t, chains[0].ClosedAt, "chain is open; unattributed closing legs do not close it")
+	assert.True(t, chains[0].AttributionGap, "chain started from unattributable mixed trade must have AttributionGap set")
 }
 
 // --- test helpers ---
@@ -498,7 +499,7 @@ func seedChainTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc 
 		AccountID:    acc.ID,
 		Broker:       acc.Broker,
 		StrategyType: domain.StrategyUnknown,
-		OpenedAt:     openedAt,
+		ExecutedAt:   openedAt,
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
 	for i := range txns {

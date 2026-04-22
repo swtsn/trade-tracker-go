@@ -22,6 +22,9 @@ type Position struct {
 	ClosedAt           *time.Time
 	StrategyType       StrategyType
 	Lots               []PositionLot // open lots only; not persisted — currently unpopulated, reserved for future use
+	// ChainAttributionGap mirrors the chain's attribution_gap flag.
+	// True when the chain was started from a mixed trade with unattributed closing P&L.
+	ChainAttributionGap bool
 }
 
 // PositionLot is the source of truth for one opening transaction.

@@ -11,14 +11,12 @@ import (
 
 // ListTradesOptions specifies filter and pagination parameters for trade queries.
 type ListTradesOptions struct {
-	Limit        int
-	Offset       int
-	OpenOnly     bool
-	ClosedOnly   bool
-	Symbol       string              // filter by underlying_symbol; empty = all
-	StrategyType domain.StrategyType // filter by strategy_type; empty = all
-	OpenedAfter  time.Time           // filter opened_at >= value; zero = no lower bound
-	OpenedBefore time.Time           // filter opened_at <= value; zero = no upper bound
+	Limit          int
+	Offset         int
+	Symbol         string              // filter by underlying_symbol; empty = all
+	StrategyType   domain.StrategyType // filter by strategy_type; empty = all
+	ExecutedAfter  time.Time           // filter executed_at >= value; zero = no lower bound
+	ExecutedBefore time.Time           // filter executed_at <= value; zero = no upper bound
 }
 
 // AccountRepository provides access to account data.
@@ -68,13 +66,11 @@ type TradeRepository interface {
 	// Returns domain.ErrNotFound when the trade does not exist or belongs to a different account.
 	GetByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Trade, error)
 	// ListByAccount returns trades with empty Transactions slices; use GetByID for full detail.
-	// OpenOnly and ClosedOnly in opts are mutually exclusive; both true returns an error.
 	ListByAccount(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
 	// ListByAccountWithTransactions is like ListByAccount but populates each trade's
 	// Transactions slice using a single batch query (no N+1).
 	ListByAccountWithTransactions(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
 	UpdateStrategy(ctx context.Context, id string, strategy domain.StrategyType) error
-	UpdateClosedAt(ctx context.Context, id string, closedAt time.Time) error
 }
 
 // TradeReader is the read-only subset of TradeRepository used by the trade gRPC handler.

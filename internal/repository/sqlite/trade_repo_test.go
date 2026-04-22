@@ -28,7 +28,6 @@ func TestTradeRepository(t *testing.T) {
 		assert.Equal(t, trade.ID, got.ID)
 		assert.Equal(t, domain.StrategyStock, got.StrategyType)
 		assert.Len(t, got.Transactions, 2)
-		assert.Nil(t, got.ClosedAt)
 	})
 
 	t.Run("get not found", func(t *testing.T) {
@@ -56,24 +55,6 @@ func TestTradeRepository(t *testing.T) {
 		assert.Len(t, trades2, 2)
 	})
 
-	t.Run("list open only filter", func(t *testing.T) {
-		repos := openTestDB(t)
-		acc := seedAccount(t, ctx, repos)
-		t0 := time.Now()
-
-		open1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, t0)
-		open2 := seedTrade(t, ctx, repos, acc, domain.StrategySingle, t0.Add(time.Hour))
-		closed := seedTrade(t, ctx, repos, acc, domain.StrategySingle, t0.Add(2*time.Hour))
-		require.NoError(t, repos.Trades.UpdateClosedAt(ctx, closed.ID, t0.Add(3*time.Hour)))
-
-		trades, total, err := repos.Trades.ListByAccount(ctx, acc.ID, repository.ListTradesOptions{OpenOnly: true})
-		require.NoError(t, err)
-		assert.Equal(t, 2, total)
-		ids := []string{trades[0].ID, trades[1].ID}
-		assert.Contains(t, ids, open1.ID)
-		assert.Contains(t, ids, open2.ID)
-	})
-
 	t.Run("update strategy", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
@@ -83,18 +64,5 @@ func TestTradeRepository(t *testing.T) {
 		got, err := repos.Trades.GetByID(ctx, trade.ID)
 		require.NoError(t, err)
 		assert.Equal(t, domain.StrategySingle, got.StrategyType)
-	})
-
-	t.Run("update closed at", func(t *testing.T) {
-		repos := openTestDB(t)
-		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
-
-		closedAt := time.Now().UTC().Truncate(time.Second).Add(time.Hour)
-		require.NoError(t, repos.Trades.UpdateClosedAt(ctx, trade.ID, closedAt))
-		got, err := repos.Trades.GetByID(ctx, trade.ID)
-		require.NoError(t, err)
-		require.NotNil(t, got.ClosedAt)
-		assert.Equal(t, closedAt, got.ClosedAt.UTC())
 	})
 }

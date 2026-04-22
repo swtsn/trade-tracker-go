@@ -102,7 +102,7 @@ func (v PositionsView) load(state SharedState) tea.Cmd {
 // showOpen controls whether to show cost_basis (open) or realized_pnl (closed).
 func buildPositionsTable(positions []*pb.Position, w, h int, showOpen bool) table.Model {
 	cols := []table.Column{
-		{Title: "Symbol", Width: 10},
+		{Title: "Symbol", Width: 14},
 		{Title: "Strategy", Width: 10},
 		{Title: "Cost Basis", Width: pnlColumnWidth},
 		{Title: "Opened", Width: 12},
@@ -118,8 +118,12 @@ func buildPositionsTable(positions []*pb.Position, w, h int, showOpen bool) tabl
 		if p.OpenedAt != nil {
 			openedAt = formatTS(p.OpenedAt.AsTime())
 		}
+		symbol := p.UnderlyingSymbol
+		if p.ChainAttributionGap {
+			symbol = "[!] " + symbol
+		}
 		row := table.Row{
-			p.UnderlyingSymbol,
+			symbol,
 			strategyLabel(p.StrategyType.String()),
 			formatPnl(p.CostBasis),
 			openedAt,

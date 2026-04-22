@@ -85,9 +85,12 @@ type Position struct {
 	RealizedPnl string                 `protobuf:"bytes,7,opt,name=realized_pnl,json=realizedPnl,proto3" json:"realized_pnl,omitempty"`
 	OpenedAt    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=opened_at,json=openedAt,proto3" json:"opened_at,omitempty"`
 	// closed_at is unset when the position is still open.
-	ClosedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=closed_at,json=closedAt,proto3" json:"closed_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ClosedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=closed_at,json=closedAt,proto3" json:"closed_at,omitempty"`
+	// chain_attribution_gap mirrors chains.attribution_gap for this position's chain.
+	// True when the chain was started from a mixed trade with unattributed closing P&L.
+	ChainAttributionGap bool `protobuf:"varint,10,opt,name=chain_attribution_gap,json=chainAttributionGap,proto3" json:"chain_attribution_gap,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Position) Reset() {
@@ -181,6 +184,13 @@ func (x *Position) GetClosedAt() *timestamppb.Timestamp {
 		return x.ClosedAt
 	}
 	return nil
+}
+
+func (x *Position) GetChainAttributionGap() bool {
+	if x != nil {
+		return x.ChainAttributionGap
+	}
+	return false
 }
 
 type ListPositionsRequest struct {
@@ -409,7 +419,7 @@ var File_tradetracker_v1_position_proto protoreflect.FileDescriptor
 
 const file_tradetracker_v1_position_proto_rawDesc = "" +
 	"\n" +
-	"\x1etradetracker/v1/position.proto\x12\x0ftradetracker.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btradetracker/v1/trade.proto\"\xf9\x02\n" +
+	"\x1etradetracker/v1/position.proto\x12\x0ftradetracker.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btradetracker/v1/trade.proto\"\xad\x03\n" +
 	"\bPosition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -421,7 +431,9 @@ const file_tradetracker_v1_position_proto_rawDesc = "" +
 	"cost_basis\x18\x06 \x01(\tR\tcostBasis\x12!\n" +
 	"\frealized_pnl\x18\a \x01(\tR\vrealizedPnl\x127\n" +
 	"\topened_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bopenedAt\x127\n" +
-	"\tclosed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\"\xaa\x01\n" +
+	"\tclosed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x122\n" +
+	"\x15chain_attribution_gap\x18\n" +
+	" \x01(\bR\x13chainAttributionGap\"\xaa\x01\n" +
 	"\x14ListPositionsRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x127\n" +

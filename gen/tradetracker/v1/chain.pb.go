@@ -236,9 +236,12 @@ type ChainDetail struct {
 	// realized_pnl is a decimal string; meaningful only for closed chains.
 	RealizedPnl string `protobuf:"bytes,6,opt,name=realized_pnl,json=realizedPnl,proto3" json:"realized_pnl,omitempty"`
 	// events are ordered chronologically: originating trade first, then each link in sequence order.
-	Events        []*ChainEvent `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Events []*ChainEvent `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
+	// attribution_gap is true when this chain was started from a mixed trade whose closing legs
+	// could not be attributed to an existing open chain. The closing P&L is unattributed.
+	AttributionGap bool `protobuf:"varint,8,opt,name=attribution_gap,json=attributionGap,proto3" json:"attribution_gap,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ChainDetail) Reset() {
@@ -318,6 +321,13 @@ func (x *ChainDetail) GetEvents() []*ChainEvent {
 		return x.Events
 	}
 	return nil
+}
+
+func (x *ChainDetail) GetAttributionGap() bool {
+	if x != nil {
+		return x.AttributionGap
+	}
+	return false
 }
 
 type GetChainRequest struct {
@@ -436,7 +446,7 @@ const file_tradetracker_v1_chain_proto_rawDesc = "" +
 	"\fcredit_debit\x18\x03 \x01(\tR\vcreditDebit\x12;\n" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"executedAt\x122\n" +
-	"\x04legs\x18\x05 \x03(\v2\x1e.tradetracker.v1.ChainEventLegR\x04legs\"\xb5\x02\n" +
+	"\x04legs\x18\x05 \x03(\v2\x1e.tradetracker.v1.ChainEventLegR\x04legs\"\xde\x02\n" +
 	"\vChainDetail\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -446,7 +456,8 @@ const file_tradetracker_v1_chain_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x127\n" +
 	"\tclosed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x12!\n" +
 	"\frealized_pnl\x18\x06 \x01(\tR\vrealizedPnl\x123\n" +
-	"\x06events\x18\a \x03(\v2\x1b.tradetracker.v1.ChainEventR\x06events\"@\n" +
+	"\x06events\x18\a \x03(\v2\x1b.tradetracker.v1.ChainEventR\x06events\x12'\n" +
+	"\x0fattribution_gap\x18\b \x01(\bR\x0eattributionGap\"@\n" +
 	"\x0fGetChainRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x0e\n" +

@@ -14,9 +14,11 @@ import (
 )
 
 const positionSelect = `
-	SELECT id, account_id, chain_id, originating_trade_id, underlying_symbol,
-	       strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at
-	FROM positions`
+	SELECT p.id, p.account_id, p.chain_id, p.originating_trade_id, p.underlying_symbol,
+	       p.strategy_type, p.cost_basis, p.realized_pnl, p.opened_at, p.updated_at, p.closed_at,
+	       COALESCE(c.attribution_gap, 0) AS chain_attribution_gap
+	FROM positions p
+	LEFT JOIN chains c ON c.id = p.chain_id`
 
 const lotJoinSelect = `
 	SELECT
@@ -79,7 +81,7 @@ func (r *positionRepo) UpdatePosition(ctx context.Context, pos *domain.Position)
 func (r *positionRepo) GetPositionByTradeID(ctx context.Context, accountID, originatingTradeID string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
-		positionSelect+` WHERE account_id = ? AND originating_trade_id = ?`,
+		positionSelect+` WHERE p.account_id = ? AND p.originating_trade_id = ?`,
 		accountID, originatingTradeID,
 	).Scan(row.ScanDest()...)
 	if err != nil {
@@ -101,7 +103,7 @@ func (r *positionRepo) GetPositionByTradeID(ctx context.Context, accountID, orig
 func (r *positionRepo) GetPositionByChainID(ctx context.Context, accountID, chainID string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
-		positionSelect+` WHERE account_id = ? AND chain_id = ?`,
+		positionSelect+` WHERE p.account_id = ? AND p.chain_id = ?`,
 		accountID, chainID,
 	).Scan(row.ScanDest()...)
 	if err != nil {
@@ -122,7 +124,7 @@ func (r *positionRepo) GetPositionByChainID(ctx context.Context, accountID, chai
 func (r *positionRepo) GetPositionByID(ctx context.Context, id string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
-		positionSelect+` WHERE id = ?`, id,
+		positionSelect+` WHERE p.id = ?`, id,
 	).Scan(row.ScanDest()...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -142,7 +144,7 @@ func (r *positionRepo) GetPositionByID(ctx context.Context, id string) (*domain.
 func (r *positionRepo) GetPositionByIDAndAccount(ctx context.Context, accountID, id string) (*domain.Position, error) {
 	var row model.Position
 	err := r.db.QueryRowContext(ctx,
-		positionSelect+` WHERE id = ? AND account_id = ?`, id, accountID,
+		positionSelect+` WHERE p.id = ? AND p.account_id = ?`, id, accountID,
 	).Scan(row.ScanDest()...)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -160,13 +162,13 @@ func (r *positionRepo) GetPositionByIDAndAccount(ctx context.Context, accountID,
 // ListPositions returns positions for an account ordered by opened_at.
 // openOnly and closedOnly are mutually exclusive; both false returns all positions.
 func (r *positionRepo) ListPositions(ctx context.Context, accountID string, openOnly, closedOnly bool) ([]domain.Position, error) {
-	q := positionSelect + ` WHERE account_id = ?`
+	q := positionSelect + ` WHERE p.account_id = ?`
 	if openOnly {
-		q += ` AND closed_at IS NULL`
+		q += ` AND p.closed_at IS NULL`
 	} else if closedOnly {
-		q += ` AND closed_at IS NOT NULL`
+		q += ` AND p.closed_at IS NOT NULL`
 	}
-	q += ` ORDER BY opened_at`
+	q += ` ORDER BY p.opened_at`
 	rows, err := r.db.QueryContext(ctx, q, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("list positions: %w", err)

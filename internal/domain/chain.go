@@ -27,6 +27,9 @@ type Chain struct {
 	CreatedAt        time.Time
 	ClosedAt         *time.Time
 	Links            []ChainLink
+	// AttributionGap is true when this chain was started from a mixed trade whose
+	// closing legs could not be attributed to an existing open chain.
+	AttributionGap bool
 }
 
 // ChainLink records one event within a chain.

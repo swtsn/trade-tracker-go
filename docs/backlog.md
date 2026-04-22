@@ -1,12 +1,8 @@
-# Future Work
+# Backlog
 
-Items explicitly deferred from current phases. Revisit when the core system is stable.
+Items explicitly deferred from current phases.
 
-## Next immediate steps
-
-- **TUI polish** — make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
-
-## Upcoming work items (no phases, ordered by priority)
+## Prioritized Backlog
 
 ### 1. Trade open/close status is a data model smell
 
@@ -16,7 +12,7 @@ Design and fix this:
 - Remove the open/closed status column from the trades view. Trades should be displayed without a lifecycle status; only positions have that concept.
 - The `?` case arises when a closing trade was imported but no open transaction exists in the log (e.g. history started mid-trade). This is not a trade status but an attribution gap. It should be surfaced differently — possibly as a warning on the chain or position rather than a trade status.
 - Audit the `Trade` proto and domain model: if `opened_at` / `closed_at` are only meaningful for display grouping (not semantics), clarify their meaning in comments. If they're vestigial lifecycle fields, consider removing them from the trade layer.
-- Related: a close-only trade with no open chain currently starts a new orphaned chain. The manual chain-stitching item in Phase 2 / Business Logic (above) covers the recovery path.
+- Related: a close-only trade with no open chain currently starts a new orphaned chain. The manual chain-stitching item in the unprioritized backlog covers the recovery path.
 
 ### 2. Strategy alignment between trades and positions views
 
@@ -38,13 +34,22 @@ Items:
 - **Trades → transaction legs**: from the trades view, pressing Enter on a row should expand or navigate to a leg view listing each transaction (symbol, action, quantity, fill price, fees, executed_at).
 - Neither requires new API endpoints. `GetChain(account_id, chain_id)` already exists and returns full chain detail including all events and legs. `Trade.transactions` is already embedded in `ListTrades` / `GetTrade` responses. The work is purely in TUI view construction and navigation wiring.
 
-## Phase 1 / Data Model
+### 4. TUI polish
+
+Make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
+
+---
+
+## Unprioritized Backlog
+
+### Data Model
+
 - **Corporate actions** — stock splits, mergers, spin-offs would require lot cost basis adjustments. No schema support yet.
 - **Crypto** — asset class placeholder exists but no broker parsers or instrument handling.
 - **Position audit log** — positions can change over their lifetime (reclassification, manual edits, roll detection). An append-only audit log of changes would make that history inspectable.
 - **Pairs positions** — modeling two-legged positions across different underlyings (e.g. long AAPL / short MSFT) would be interesting but is very far out. Requires cross-underlying position grouping, which the current model does not support.
 
-## Phase 2 / Business Logic
+### Business Logic
 
 - **Trade purpose / playbook classification** — a user-defined label applied to a position or chain that captures *why* the trade was put on, orthogonal to the auto-detected strategy type. Examples: "income ladder", "long earnings straddle", "LEAPS hedge". Strategy type is derived mechanically from the leg structure; trade purpose is a higher-level intent that only the user knows.
 
@@ -74,7 +79,7 @@ Items:
   pre-existing positions at $0 cost basis. Decide whether to import as $0-basis opening lots
   or skip; finalize in the Schwab parser.
 
-## Supporting account balance
+### Account Balance
 
 These items are deferred until account-level tracking is added. Currently the system is
 concerned with positions and P&L only.
@@ -85,15 +90,16 @@ concerned with positions and P&L only.
   cash balance but aren't associated with any trade. Tastytrade: `Money Movement / Balance
   Adjustment` rows.
 
-## TUI
+### TUI
 
 - **Server-side error surfacing** — the TUI has no structured way to surface server-side warnings or non-fatal errors to the user. The server logs these (e.g. skipped transactions, missing position rows) but the TUI client only receives gRPC status codes. A clean solution would propagate actionable server warnings through the RPC response (e.g. a repeated `warnings` field on affected responses) so the TUI can display them inline rather than silently dropping them.
 
-## Admin / Operations
+### Admin / Operations
 
 - **Admin API** — long-term, an admin section is needed for operational tasks that fall outside the normal user-facing API. Initial candidate: ad-hoc chain detection (`ChainService.DetectChains`) for backfilling or reprocessing an account's history. Other candidates include manual trade reclassification and position recalculation. These should be separate RPCs (or a separate service) with restricted access, not mixed into the user-facing API.
 
-## Infrastructure
+### Infrastructure
+
 - **CloseLot / UpdatePosition atomicity** — `PositionService.processClosing` calls `CloseLot` (inserts a `lot_closings` row and updates `remaining_quantity`) and then `accumulatePnL` (calls `UpdatePosition`) as two separate DB operations with no enclosing transaction. A crash between them leaves a lot permanently closed while `positions.realized_pnl` is never updated — silently wrong totals with no audit trail. The fix requires transaction-scoped repository operations (`BeginTx` propagation on `Repos`). To detect divergence before the fix lands, run:
   ```sql
   SELECT lc.lot_id, SUM(lc.realized_pnl) AS lot_pnl, p.realized_pnl AS pos_pnl

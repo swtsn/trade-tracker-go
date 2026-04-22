@@ -55,6 +55,9 @@ message ChainDetail {
   string realized_pnl = 6;
   // events are ordered chronologically: originating trade first, then each link in sequence order.
   repeated ChainEvent events = 7;
+  // attribution_gap is true when this chain was started from a mixed trade whose closing legs
+  // could not be attributed to an existing open chain. The closing P&L is unattributed.
+  bool attribution_gap = 8;
 }
 
 message GetChainRequest {

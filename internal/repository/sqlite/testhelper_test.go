@@ -76,7 +76,7 @@ func seedTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *doma
 		Broker:           acc.Broker,
 		StrategyType:     strategy,
 		UnderlyingSymbol: "TEST",
-		OpenedAt:         openedAt.UTC().Truncate(time.Second),
+		ExecutedAt:       openedAt.UTC().Truncate(time.Second),
 		Notes:            "",
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
@@ -91,7 +91,7 @@ func seedChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *doma
 		AccountID:        acc.ID,
 		UnderlyingSymbol: "TEST",
 		OriginalTradeID:  anchorTrade.ID,
-		CreatedAt:        anchorTrade.OpenedAt,
+		CreatedAt:        anchorTrade.ExecutedAt,
 	}
 	require.NoError(t, repos.Chains.CreateChain(ctx, chain))
 	return chain

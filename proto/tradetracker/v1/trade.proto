@@ -123,9 +123,10 @@ message Trade {
   string broker = 3;
   StrategyType strategy_type = 4;
   string underlying_symbol = 5;
-  google.protobuf.Timestamp opened_at = 6;
-  // closed_at is unset when the trade is still open.
-  google.protobuf.Timestamp closed_at = 7;
+  // executed_at is the earliest ExecutedAt across the trade's transactions.
+  google.protobuf.Timestamp executed_at = 6;
+  reserved 7; // was closed_at; removed — use positions/chains for close state
+  reserved "closed_at";
   string notes = 8;
   repeated Transaction transactions = 9;
 }
@@ -133,16 +134,15 @@ message Trade {
 message ListTradesRequest {
   // account_id is required.
   string account_id = 1;
-  // opened_after and opened_before filter by opened_at; both optional.
-  google.protobuf.Timestamp opened_after = 2;
-  google.protobuf.Timestamp opened_before = 3;
+  // executed_after and executed_before filter by executed_at; both optional.
+  google.protobuf.Timestamp executed_after = 2;
+  google.protobuf.Timestamp executed_before = 3;
   // symbol filters by underlying_symbol; empty = all symbols.
   string symbol = 4;
   // strategy_type filters by strategy; UNSPECIFIED = all strategies.
   StrategyType strategy_type = 5;
-  // open_only and closed_only are mutually exclusive.
-  bool open_only = 6;
-  bool closed_only = 7;
+  reserved 6, 7; // were open_only and closed_only booleans; removed — not useful in practice
+  reserved "open_only", "closed_only";
   // page_size caps results; server enforces a maximum of 500. Zero means use the maximum.
   // page_token is reserved for future cursor-based pagination.
   int32 page_size = 8;
