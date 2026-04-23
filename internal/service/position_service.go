@@ -45,11 +45,12 @@ func (s *PositionService) ListPositions(ctx context.Context, accountID string, o
 
 // ProcessTrade processes all transactions for a trade, creating/updating lots and positions.
 // chainID must be the chain this trade belongs to (returned by ChainService.ProcessTrade).
+// strategyType is the classified strategy for the trade, burned in on position creation.
 // txns must be in closing-first order (guaranteed by ImportService).
 // Opening legs create new lots and upsert the position row for the trade.
 // Closing legs FIFO-match against open lots, compute realized P&L, and stamp
 // position.closed_at when all lots under the position are fully closed.
-func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error {
 	for _, tx := range txns {
 		if tx.TradeID != tradeID {
 			return fmt.Errorf("position service: transaction %s has trade_id %q, expected %q", tx.ID, tx.TradeID, tradeID)
@@ -64,7 +65,7 @@ func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns
 				return fmt.Errorf("position service: closing tx %s: %w", tx.ID, err)
 			}
 		case domain.PositionEffectOpening:
-			if err := s.processOpening(ctx, tradeID, chainID, tx); err != nil {
+			if err := s.processOpening(ctx, tradeID, chainID, strategyType, tx); err != nil {
 				return fmt.Errorf("position service: opening tx %s: %w", tx.ID, err)
 			}
 		}
@@ -72,8 +73,8 @@ func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns
 	return nil
 }
 
-// processOpening creates a lot and upserts the position row for tradeID.
-func (s *PositionService) processOpening(ctx context.Context, tradeID, chainID string, tx domain.Transaction) error {
+// processOpening creates a lot and upserts the position row for the chain (or trade if unchained).
+func (s *PositionService) processOpening(ctx context.Context, tradeID, chainID string, strategyType domain.StrategyType, tx domain.Transaction) error {
 	lotID, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("generate lot id: %w", err)
@@ -131,7 +132,7 @@ func (s *PositionService) processOpening(ctx context.Context, tradeID, chainID s
 			RealizedPnL:        decimal.Zero,
 			OpenedAt:           tx.ExecutedAt,
 			UpdatedAt:          tx.ExecutedAt,
-			StrategyType:       domain.StrategyUnknown,
+			StrategyType:       strategyType,
 		}
 		return s.positions.CreatePosition(ctx, pos)
 	}

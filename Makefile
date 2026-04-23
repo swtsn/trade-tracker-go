@@ -10,7 +10,9 @@ COMPOSE_FILE := ~/docker-compose.yml
 
 -include .env
 
-.PHONY: all fmt vet lint test build build-server build-tui release-server deploy clean proto
+HOST ?= apollo
+
+.PHONY: all fmt vet lint test build build-server build-tui release-server deploy clean proto db-reset
 
 all: build
 
@@ -48,3 +50,6 @@ deploy: release-server
 
 clean:
 	rm -f $(BINARY) $(RELEASE) $(TUI_BINARY)
+
+db-reset:
+	ssh $(HOST) "docker compose -f $(COMPOSE_FILE) down trade-tracker && docker volume rm swtsn_trade-tracker-data && docker compose -f $(COMPOSE_FILE) up -d trade-tracker"

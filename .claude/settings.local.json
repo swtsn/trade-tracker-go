@@ -12,7 +12,9 @@
       "Bash(buf:*)",
       "Bash(grep:*)",
       "Bash(git add:*)",
-      "Bash(find /root/go/pkg/mod/github.com/charmbracelet/bubbles* -name \"table.go\")"
+      "Bash(find /root/go/pkg/mod/github.com/charmbracelet/bubbles* -name \"table.go\")",
+      "Bash(cat)",
+      "Read(//tmp/**)"
     ]
   }
 }

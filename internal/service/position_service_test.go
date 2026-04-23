@@ -57,7 +57,7 @@ func TestPositionService_OpeningCreatesLotAndPosition(t *testing.T) {
 	seedPositionTrade(t, ctx, repos, acc, tradeID, openedAt, tx)
 	chainID := seedPositionChain(t, ctx, repos, acc, tradeID)
 
-	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{tx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{tx}, chainID, domain.StrategyUnknown))
 
 	// Lot created: short position (STO → negative open_quantity).
 	lots, err := repos.Positions.ListOpenLotsByInstrument(ctx, acc.ID, inst.InstrumentID())
@@ -75,6 +75,30 @@ func TestPositionService_OpeningCreatesLotAndPosition(t *testing.T) {
 	expected := decimal.NewFromFloat(349.35)
 	assert.True(t, expected.Equal(pos.CostBasis), "got %s", pos.CostBasis)
 	assert.Nil(t, pos.ClosedAt)
+}
+
+// TestPositionService_StrategyBurnedInOnCreate verifies that the strategy from the
+// opening trade is written to the position on creation, not StrategyUnknown.
+func TestPositionService_StrategyBurnedInOnCreate(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+
+	exp := time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC)
+	openedAt := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	tradeID := uuid.New().String()
+	inst := makeEquityOption("SPY", 490, exp, domain.OptionTypePut)
+	tx := makeTransaction(tradeID, "strat-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 1, openedAt)
+
+	seedPositionTrade(t, ctx, repos, acc, tradeID, openedAt, tx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID)
+
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{tx}, chainID, domain.StrategySingle))
+
+	pos, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, tradeID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.StrategySingle, pos.StrategyType)
 }
 
 // TestPositionService_MultiLegOpeningAccumulatesCostBasis: two opening legs in the
@@ -105,7 +129,7 @@ func TestPositionService_MultiLegOpeningAccumulatesCostBasis(t *testing.T) {
 	chainID := seedPositionChain(t, ctx, repos, acc, tradeID)
 
 	// Import service sends closing-first; here both are opening so order doesn't matter.
-	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{stoTx, btoTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{stoTx, btoTx}, chainID, domain.StrategyVertical))
 
 	pos, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, tradeID)
 	require.NoError(t, err)
@@ -115,6 +139,8 @@ func TestPositionService_MultiLegOpeningAccumulatesCostBasis(t *testing.T) {
 	// net cost_basis = 300 − 150 = 150 (net credit)
 	expected := decimal.NewFromFloat(150)
 	assert.True(t, expected.Equal(pos.CostBasis), "got %s", pos.CostBasis)
+	// Strategy burned in on first leg must survive the second-leg UpdatePosition call.
+	assert.Equal(t, domain.StrategyVertical, pos.StrategyType)
 }
 
 // TestPositionService_ClosingFullLotRealizedPnL: closing a full lot computes correct
@@ -138,7 +164,7 @@ func TestPositionService_ClosingFullLotRealizedPnL(t *testing.T) {
 	openTx.Fees = decimal.NewFromFloat(0.65)
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID, domain.StrategyUnknown))
 
 	// Trade 2: BTC 1 contract at $0.50, fees $0.65.
 	trade2ID := uuid.New().String()
@@ -146,7 +172,7 @@ func TestPositionService_ClosingFullLotRealizedPnL(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(0.50)
 	closeTx.Fees = decimal.NewFromFloat(0.65)
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID, domain.StrategyUnknown))
 
 	// Realized P&L:
 	// close_cf = CashFlowSign(BTC) × 0.50 × 1 × 100 = -1 × 50 = -50
@@ -188,7 +214,7 @@ func TestPositionService_PartialClose(t *testing.T) {
 	openTx.Fees = decimal.NewFromFloat(1.30)
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID, domain.StrategyUnknown))
 
 	// BTC 1 contract (partial).
 	trade2ID := uuid.New().String()
@@ -196,7 +222,7 @@ func TestPositionService_PartialClose(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(1.00)
 	closeTx.Fees = decimal.NewFromFloat(0.65)
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID, domain.StrategyUnknown))
 
 	// Lot should still have 1 contract remaining (short, so -1).
 	lots, err := repos.Positions.ListOpenLotsByInstrument(ctx, acc.ID, inst.InstrumentID())
@@ -230,7 +256,7 @@ func TestPositionService_FIFOOrder(t *testing.T) {
 	tx1.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, tx1)
 	chainID1 := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{tx1}, chainID1))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{tx1}, chainID1, domain.StrategyUnknown))
 
 	// Trade 2: STO 1 at $4.00 (newer lot).
 	trade2ID := uuid.New().String()
@@ -239,7 +265,7 @@ func TestPositionService_FIFOOrder(t *testing.T) {
 	tx2.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, tx2)
 	chainID2 := seedPositionChain(t, ctx, repos, acc, trade2ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{tx2}, chainID2))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{tx2}, chainID2, domain.StrategyUnknown))
 
 	// Trade 3: BTC 1 — should close the oldest lot (price $3.00) first.
 	trade3ID := uuid.New().String()
@@ -247,7 +273,7 @@ func TestPositionService_FIFOOrder(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(0.50)
 	closeTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade3ID, t3, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{closeTx}, chainID1))
+	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{closeTx}, chainID1, domain.StrategyUnknown))
 
 	// One lot should remain (the newer $4.00 one).
 	lots, err := repos.Positions.ListOpenLotsByInstrument(ctx, acc.ID, inst.InstrumentID())
@@ -289,7 +315,7 @@ func TestPositionService_ExpirationAtZero(t *testing.T) {
 	openTx.Fees = decimal.NewFromFloat(0.65)
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID, domain.StrategyUnknown))
 
 	// EXPIRATION at price 0.
 	trade2ID := uuid.New().String()
@@ -297,7 +323,7 @@ func TestPositionService_ExpirationAtZero(t *testing.T) {
 	expTx.FillPrice = decimal.Zero
 	expTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, expTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{expTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{expTx}, chainID, domain.StrategyUnknown))
 
 	// Position closed; P&L = close_cf + open_cf - fees
 	// close_cf = 0 (price 0); open_cf = +1 × 2.00 × 1 × 100 = 200; fees = 0 + 0.65
@@ -327,7 +353,7 @@ func TestPositionService_LongPositionPnL(t *testing.T) {
 	buyTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, buyTx)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{buyTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{buyTx}, chainID, domain.StrategyUnknown))
 
 	// SELL 10 shares at $180, fees $0.
 	trade2ID := uuid.New().String()
@@ -335,7 +361,7 @@ func TestPositionService_LongPositionPnL(t *testing.T) {
 	sellTx.FillPrice = decimal.NewFromFloat(180)
 	sellTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, sellTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{sellTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{sellTx}, chainID, domain.StrategyUnknown))
 
 	// P&L: close_cf = +1 × 180 × 10 × 1 = 1800
 	//       open_cf = -1 × 170 × 10 × 1 = -1700
@@ -370,7 +396,7 @@ func TestPositionService_RollDoesNotClosePosition(t *testing.T) {
 	openTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID1 := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID1))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID1, domain.StrategyUnknown))
 
 	// Trade 2: roll — close old + open new (mixed). The roll starts a new chain position.
 	trade2ID := uuid.New().String()
@@ -384,7 +410,7 @@ func TestPositionService_RollDoesNotClosePosition(t *testing.T) {
 	chainID2 := seedPositionChain(t, ctx, repos, acc, trade2ID)
 
 	// ProcessTrade receives closing-first order.
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx, openTx2}, chainID2))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx, openTx2}, chainID2, domain.StrategyUnknown))
 
 	// Old lot (putInst1) fully closed.
 	oldLots, err := repos.Positions.ListOpenLotsByInstrument(ctx, acc.ID, putInst1.InstrumentID())
@@ -405,6 +431,8 @@ func TestPositionService_RollDoesNotClosePosition(t *testing.T) {
 	pos2, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, trade2ID)
 	require.NoError(t, err)
 	assert.Nil(t, pos2.ClosedAt, "rolled position should be open")
+	// Roll trade is BTC+STO — classifier returns Unknown; re-derive from live lots is a future backlog item.
+	assert.Equal(t, domain.StrategyUnknown, pos2.StrategyType)
 }
 
 // TestPositionService_OpenPositionsListing: ListOpenPositions returns only open positions.
@@ -426,7 +454,7 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	openTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID1 := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID1))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID1, domain.StrategyUnknown))
 
 	// Close it.
 	trade2ID := uuid.New().String()
@@ -434,7 +462,7 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(0.50)
 	closeTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID1))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID1, domain.StrategyUnknown))
 
 	// Open another trade (AAPL equity).
 	aaplInst := makeEquity("AAPL")
@@ -444,7 +472,7 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	buyTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade3ID, t1, buyTx)
 	chainID3 := seedPositionChain(t, ctx, repos, acc, trade3ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{buyTx}, chainID3))
+	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{buyTx}, chainID3, domain.StrategyUnknown))
 
 	open, err := repos.Positions.ListPositions(ctx, acc.ID, true, false)
 	require.NoError(t, err)
@@ -472,7 +500,7 @@ func TestPositionService_ChainedPositionPnL(t *testing.T) {
 	openTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx}, chainID, domain.StrategyUnknown))
 
 	// Trade 2: BTC 1 contract at $0.50.
 	trade2ID := uuid.New().String()
@@ -480,7 +508,7 @@ func TestPositionService_ChainedPositionPnL(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(0.50)
 	closeTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID, domain.StrategyUnknown))
 
 	// P&L: close_cf = -1 × 0.50 × 1 × 100 = -50; open_cf = +1 × 3.50 × 1 × 100 = 350; pnl = 300
 	pos, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, trade1ID)
@@ -518,7 +546,7 @@ func TestPositionService_ChainedPositionOpenLotsCheckedByChain(t *testing.T) {
 	openTx1.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, openTx1)
 	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx1}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{openTx1}, chainID, domain.StrategyUnknown))
 
 	// Trade 2: STO 1 contract of inst2 (extension of the same chain).
 	trade2ID := uuid.New().String()
@@ -526,7 +554,7 @@ func TestPositionService_ChainedPositionOpenLotsCheckedByChain(t *testing.T) {
 	openTx2.FillPrice = decimal.NewFromFloat(2.50)
 	openTx2.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, openTx2)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{openTx2}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{openTx2}, chainID, domain.StrategyUnknown))
 
 	// Trade 3: BTC 1 contract of inst1 — closes trade1's lot only.
 	trade3ID := uuid.New().String()
@@ -534,7 +562,7 @@ func TestPositionService_ChainedPositionOpenLotsCheckedByChain(t *testing.T) {
 	closeTx.FillPrice = decimal.NewFromFloat(0.50)
 	closeTx.Fees = decimal.Zero
 	seedPositionTrade(t, ctx, repos, acc, trade3ID, t3, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{closeTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{closeTx}, chainID, domain.StrategyUnknown))
 
 	// inst1 lot is now closed; inst2 lot (from trade2) is still open.
 	// The chain's position must NOT be stamped closed — ListOpenLotsByChain still
