@@ -33,7 +33,6 @@ type Trade struct {
 	AccountID        string
 	Broker           string
 	Transactions     []Transaction
-	StrategyType     StrategyType
 	UnderlyingSymbol string
 	// ExecutedAt is the earliest ExecutedAt across the trade's transactions.
 	// It is a grouping timestamp, not a lifecycle state.

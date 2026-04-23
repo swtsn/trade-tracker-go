@@ -40,12 +40,11 @@ func seedImportAccount(t *testing.T, ctx context.Context, repos *sqlite.Repos) *
 }
 
 func newImportService(repos *sqlite.Repos, hooks ...service.PostImportHook) *service.ImportService {
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
 	return service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
 		repos.Instruments,
-		strategy.NewClassifier(),
 		chainSvc,
 		hooks...,
 	)
@@ -145,9 +144,10 @@ func TestImportService_ClassifiesStrategy(t *testing.T) {
 	_, err := svc.Import(ctx, txs)
 	require.NoError(t, err)
 
-	trade, err := repos.Trades.GetByID(ctx, tradeID)
+	// Strategy is now classified at chain creation, not on the trade.
+	chain, err := repos.Chains.GetChainByTradeID(ctx, tradeID)
 	require.NoError(t, err)
-	assert.Equal(t, domain.StrategyVertical, trade.StrategyType)
+	assert.Equal(t, domain.StrategyVertical, chain.StrategyType)
 }
 
 func TestImportService_ClosingLegsCreatedFirst(t *testing.T) {
@@ -287,8 +287,8 @@ func TestImportService_PartialTransactionFailure(t *testing.T) {
 
 	// Fail on the 2nd transaction Create (first succeeds, second fails).
 	txRepo := &failingTxRepo{TransactionRepository: repos.Transactions, failOnNth: 2}
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
-	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, strategy.NewClassifier(), chainSvc)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
+	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, chainSvc)
 
 	exp := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
 	tradeID := uuid.New().String()

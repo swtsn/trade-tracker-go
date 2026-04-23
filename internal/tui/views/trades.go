@@ -158,7 +158,6 @@ func (v TradesView) load(state SharedState) tea.Cmd {
 func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
 	cols := []table.Column{
 		{Title: "Symbol", Width: 10},
-		{Title: "Strategy", Width: 10},
 		{Title: "Executed", Width: 12},
 		{Title: "Notes", Width: 20},
 	}
@@ -171,7 +170,6 @@ func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
 		}
 		rows[i] = table.Row{
 			tr.UnderlyingSymbol,
-			strategyLabel(tr.StrategyType.String()),
 			executedAt,
 			tr.Notes,
 		}

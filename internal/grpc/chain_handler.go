@@ -48,6 +48,7 @@ func chainDetailToProto(d *domain.ChainDetail) *pb.ChainDetail {
 		RealizedPnl:      d.PnL.String(),
 		Events:           make([]*pb.ChainEvent, len(d.Events)),
 		AttributionGap:   d.Chain.AttributionGap,
+		StrategyType:     string(d.Chain.StrategyType),
 	}
 	if d.Chain.ClosedAt != nil {
 		c.ClosedAt = timestamppb.New(*d.Chain.ClosedAt)

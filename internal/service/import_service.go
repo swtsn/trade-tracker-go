@@ -6,7 +6,6 @@ import (
 
 	"trade-tracker-go/internal/domain"
 	"trade-tracker-go/internal/repository"
-	"trade-tracker-go/internal/strategy"
 )
 
 // PostImportHook is invoked after each trade is successfully persisted and chained.
@@ -42,7 +41,6 @@ type ImportService struct {
 	trades      repository.TradeRepository
 	txns        repository.TransactionRepository
 	instruments repository.InstrumentRepository
-	classifier  StrategyClassifier
 	chainer     TradeChainer
 	hooks       []PostImportHook
 }
@@ -54,7 +52,6 @@ func NewImportService(
 	trades repository.TradeRepository,
 	txns repository.TransactionRepository,
 	instruments repository.InstrumentRepository,
-	classifier StrategyClassifier,
 	chainer TradeChainer,
 	hooks ...PostImportHook,
 ) *ImportService {
@@ -62,7 +59,6 @@ func NewImportService(
 		trades:      trades,
 		txns:        txns,
 		instruments: instruments,
-		classifier:  classifier,
 		chainer:     chainer,
 		hooks:       hooks,
 	}
@@ -164,8 +160,7 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 		return nil
 	}
 
-	strategyType := s.classifier.Classify(strategy.FromTransactions(txs))
-	trade := buildTrade(tradeID, txs, strategyType)
+	trade := buildTrade(tradeID, txs)
 
 	if err := s.trades.Create(ctx, trade); err != nil {
 		result.Failed++
@@ -191,7 +186,8 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	}
 
 	// Create or extend the chain for this trade. This is a core write step, not a hook.
-	chainID, err := s.chainer.ProcessTrade(ctx, tradeID)
+	// strategyType is classified inside ChainService.startChain and returned here for hooks.
+	chainID, strategyType, err := s.chainer.ProcessTrade(ctx, tradeID)
 	if err != nil {
 		result.Failed++
 		result.Errors = append(result.Errors, ImportError{
@@ -238,7 +234,7 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 // share them). UnderlyingSymbol prefers the first opening leg; falls back to txs[0].
 // ExecutedAt is the earliest ExecutedAt across the group.
 // txs must not be empty.
-func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.StrategyType) *domain.Trade {
+func buildTrade(tradeID string, txs []domain.Transaction) *domain.Trade {
 	if len(txs) == 0 {
 		panic("buildTrade: txs must not be empty")
 	}
@@ -252,7 +248,6 @@ func buildTrade(tradeID string, txs []domain.Transaction, strategyType domain.St
 		ID:               tradeID,
 		AccountID:        txs[0].AccountID,
 		Broker:           txs[0].Broker,
-		StrategyType:     strategyType,
 		UnderlyingSymbol: underlyingSymbol(txs),
 		ExecutedAt:       earliest,
 	}

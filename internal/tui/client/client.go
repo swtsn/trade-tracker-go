@@ -17,11 +17,10 @@ import (
 
 // ListTradesParams mirrors the optional filters accepted by TradeService.ListTrades.
 type ListTradesParams struct {
-	AccountID    string
-	Symbol       string
-	StrategyType pb.StrategyType
-	From         *time.Time
-	To           *time.Time
+	AccountID string
+	Symbol    string
+	From      *time.Time
+	To        *time.Time
 }
 
 // ImportParams holds the inputs for a single ImportTransactions call.
@@ -150,9 +149,8 @@ func (c *grpcClient) GetChain(ctx context.Context, accountID, chainID string) (*
 
 func (c *grpcClient) ListTrades(ctx context.Context, p ListTradesParams) ([]*pb.Trade, error) {
 	req := &pb.ListTradesRequest{
-		AccountId:    p.AccountID,
-		Symbol:       p.Symbol,
-		StrategyType: p.StrategyType,
+		AccountId: p.AccountID,
+		Symbol:    p.Symbol,
 	}
 	if p.From != nil {
 		req.ExecutedAfter = timestamppb.New(*p.From)

@@ -14,7 +14,10 @@
       "Bash(git add:*)",
       "Bash(find /root/go/pkg/mod/github.com/charmbracelet/bubbles* -name \"table.go\")",
       "Bash(cat)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(xargs ls *)",
+      "Bash(perl -i -pe 's/seedTrade\\\\\\(t, ctx, repos, acc, domain\\\\.\\\\w+, /seedTrade\\(t, ctx, repos, acc, /g' internal/repository/sqlite/transaction_repo_test.go internal/repository/sqlite/position_repo_test.go internal/repository/sqlite/chain_repo_test.go)",
+      "Bash(perl -i -pe 's/seedTrade\\\\\\(t, ctx, r2, a, domain\\\\.\\\\w+, /seedTrade\\(t, ctx, r2, a, /g' internal/repository/sqlite/transaction_repo_test.go)"
     ]
   }
 }

@@ -13,10 +13,9 @@ import (
 type ListTradesOptions struct {
 	Limit          int
 	Offset         int
-	Symbol         string              // filter by underlying_symbol; empty = all
-	StrategyType   domain.StrategyType // filter by strategy_type; empty = all
-	ExecutedAfter  time.Time           // filter executed_at >= value; zero = no lower bound
-	ExecutedBefore time.Time           // filter executed_at <= value; zero = no upper bound
+	Symbol         string    // filter by underlying_symbol; empty = all
+	ExecutedAfter  time.Time // filter executed_at >= value; zero = no lower bound
+	ExecutedBefore time.Time // filter executed_at <= value; zero = no upper bound
 }
 
 // AccountRepository provides access to account data.
@@ -70,7 +69,6 @@ type TradeRepository interface {
 	// ListByAccountWithTransactions is like ListByAccount but populates each trade's
 	// Transactions slice using a single batch query (no N+1).
 	ListByAccountWithTransactions(ctx context.Context, accountID string, opts ListTradesOptions) ([]domain.Trade, int, error)
-	UpdateStrategy(ctx context.Context, id string, strategy domain.StrategyType) error
 }
 
 // TradeReader is the read-only subset of TradeRepository used by the trade gRPC handler.

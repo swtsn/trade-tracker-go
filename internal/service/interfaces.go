@@ -31,10 +31,11 @@ type StrategyClassifier interface {
 	Classify(legs []strategy.LegShape) domain.StrategyType
 }
 
-// TradeChainer creates or extends a chain for a trade and returns the chain ID.
+// TradeChainer creates or extends a chain for a trade and returns the chain ID and
+// the strategy type burned in at chain creation.
 // *ChainService satisfies this interface.
 type TradeChainer interface {
-	ProcessTrade(ctx context.Context, tradeID string) (string, error)
+	ProcessTrade(ctx context.Context, tradeID string) (string, domain.StrategyType, error)
 }
 
 // Importer persists a batch of normalized transactions.
@@ -47,7 +48,7 @@ type Importer interface {
 // Used as the post-import hook path; never called by gRPC handlers.
 // *PositionService satisfies this interface.
 type PositionWriter interface {
-	ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error
+	ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error
 }
 
 // PositionReader queries position data.

@@ -38,9 +38,8 @@ func (h *TradeHandler) ListTrades(ctx context.Context, req *pb.ListTradesRequest
 	}
 
 	opts := repository.ListTradesOptions{
-		Limit:        limit,
-		Symbol:       req.Symbol,
-		StrategyType: protoToStrategyType(req.StrategyType),
+		Limit:  limit,
+		Symbol: req.Symbol,
 	}
 	if req.ExecutedAfter != nil {
 		opts.ExecutedAfter = req.ExecutedAfter.AsTime()
@@ -83,7 +82,6 @@ func tradeToProto(t *domain.Trade) *pb.Trade {
 		Id:               t.ID,
 		AccountId:        t.AccountID,
 		Broker:           t.Broker,
-		StrategyType:     strategyTypeToProto(t.StrategyType),
 		UnderlyingSymbol: t.UnderlyingSymbol,
 		ExecutedAt:       timestamppb.New(t.ExecutedAt),
 		Notes:            t.Notes,
@@ -175,49 +173,6 @@ func strategyTypeToProto(s domain.StrategyType) pb.StrategyType {
 	default:
 		// Empty string means unclassified (no strategy assigned yet).
 		return pb.StrategyType_STRATEGY_TYPE_UNSPECIFIED
-	}
-}
-
-// protoToStrategyType maps a proto StrategyType back to a domain.StrategyType for filtering.
-// Returns empty string for UNSPECIFIED (meaning no filter applied).
-func protoToStrategyType(s pb.StrategyType) domain.StrategyType {
-	switch s {
-	case pb.StrategyType_STRATEGY_TYPE_IRON_BUTTERFLY:
-		return domain.StrategyIronButterfly
-	case pb.StrategyType_STRATEGY_TYPE_IRON_CONDOR:
-		return domain.StrategyIronCondor
-	case pb.StrategyType_STRATEGY_TYPE_BROKEN_HEART_BUTTERFLY:
-		return domain.StrategyBrokenHeartButterfly
-	case pb.StrategyType_STRATEGY_TYPE_BUTTERFLY:
-		return domain.StrategyButterfly
-	case pb.StrategyType_STRATEGY_TYPE_BROKEN_WING_BUTTERFLY:
-		return domain.StrategyBrokenWingButterfly
-	case pb.StrategyType_STRATEGY_TYPE_COVERED_CALL:
-		return domain.StrategyCoveredCall
-	case pb.StrategyType_STRATEGY_TYPE_RATIO:
-		return domain.StrategyRatio
-	case pb.StrategyType_STRATEGY_TYPE_BACK_RATIO:
-		return domain.StrategyBackRatio
-	case pb.StrategyType_STRATEGY_TYPE_STRADDLE:
-		return domain.StrategyStraddle
-	case pb.StrategyType_STRATEGY_TYPE_STRANGLE:
-		return domain.StrategyStrangle
-	case pb.StrategyType_STRATEGY_TYPE_VERTICAL:
-		return domain.StrategyVertical
-	case pb.StrategyType_STRATEGY_TYPE_CALENDAR:
-		return domain.StrategyCalendar
-	case pb.StrategyType_STRATEGY_TYPE_DIAGONAL:
-		return domain.StrategyDiagonal
-	case pb.StrategyType_STRATEGY_TYPE_SINGLE:
-		return domain.StrategySingle
-	case pb.StrategyType_STRATEGY_TYPE_STOCK:
-		return domain.StrategyStock
-	case pb.StrategyType_STRATEGY_TYPE_FUTURE:
-		return domain.StrategyFuture
-	case pb.StrategyType_STRATEGY_TYPE_UNKNOWN:
-		return domain.StrategyUnknown
-	default:
-		return ""
 	}
 }
 

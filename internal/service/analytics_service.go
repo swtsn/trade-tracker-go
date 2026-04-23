@@ -174,14 +174,14 @@ func (s *AnalyticsService) GetPnLSummary(ctx context.Context, accountID string, 
 }
 
 // GetStrategyPerformance returns per-strategy P&L and win-rate for closed positions.
-// Strategy type is taken from the originating trade (positions.originating_trade_id → trades.strategy_type).
+// Strategy type is taken from the chain (positions.chain_id → chains.strategy_type).
 // The date range is applied to positions.closed_at.
 // Results are returned in first-seen order (deterministic for a given dataset).
 func (s *AnalyticsService) GetStrategyPerformance(ctx context.Context, accountID string, from, to time.Time) ([]StrategyStats, error) {
 	const q = `
-		SELECT p.realized_pnl, t.strategy_type
+		SELECT p.realized_pnl, c.strategy_type
 		FROM positions p
-		JOIN trades t ON t.id = p.originating_trade_id
+		JOIN chains c ON c.id = p.chain_id
 		WHERE p.account_id = ?
 		  AND p.closed_at IS NOT NULL
 		  AND p.closed_at >= ?

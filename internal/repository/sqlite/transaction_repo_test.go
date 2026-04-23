@@ -16,7 +16,7 @@ func TestTransactionRepository(t *testing.T) {
 	repos := openTestDB(t)
 	acc := seedAccount(t, ctx, repos)
 	inst := seedEquityInstrument(t, ctx, repos, "AAPL")
-	trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+	trade := seedTrade(t, ctx, repos, acc, time.Now())
 
 	t.Run("create and get by id", func(t *testing.T) {
 		tx := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionBuy, 10, 175.50, domain.PositionEffectOpening, time.Now())
@@ -42,7 +42,7 @@ func TestTransactionRepository(t *testing.T) {
 		r2 := openTestDB(t)
 		a := seedAccount(t, ctx, r2)
 		i := seedEquityInstrument(t, ctx, r2, "NVDA")
-		tr := seedTrade(t, ctx, r2, a, domain.StrategyStock, time.Now())
+		tr := seedTrade(t, ctx, r2, a, time.Now())
 
 		seedTransaction(t, ctx, r2, a, tr, i, domain.ActionBuy, 5, 100, domain.PositionEffectOpening, time.Now())
 		seedTransaction(t, ctx, r2, a, tr, i, domain.ActionSell, 5, 110, domain.PositionEffectClosing, time.Now().Add(time.Hour))
@@ -56,7 +56,7 @@ func TestTransactionRepository(t *testing.T) {
 		r2 := openTestDB(t)
 		a := seedAccount(t, ctx, r2)
 		i := seedEquityInstrument(t, ctx, r2, "META")
-		tr := seedTrade(t, ctx, r2, a, domain.StrategyStock, time.Now())
+		tr := seedTrade(t, ctx, r2, a, time.Now())
 		tx := seedTransaction(t, ctx, r2, a, tr, i, domain.ActionBuy, 1, 500, domain.PositionEffectOpening, time.Now())
 
 		// ExistsByBrokerTxID should return true.
@@ -74,7 +74,7 @@ func TestTransactionRepository(t *testing.T) {
 		r2 := openTestDB(t)
 		a := seedAccount(t, ctx, r2)
 		i := seedEquityInstrument(t, ctx, r2, "GOOG")
-		tr := seedTrade(t, ctx, r2, a, domain.StrategyStock, time.Now())
+		tr := seedTrade(t, ctx, r2, a, time.Now())
 
 		t0 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 		seedTransaction(t, ctx, r2, a, tr, i, domain.ActionBuy, 1, 100, domain.PositionEffectOpening, t0)

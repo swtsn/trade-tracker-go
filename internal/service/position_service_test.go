@@ -25,11 +25,10 @@ func newPositionSvc(repos *sqlite.Repos) *service.PositionService {
 func seedPositionTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, tradeID string, openedAt time.Time, txns ...domain.Transaction) {
 	t.Helper()
 	trade := &domain.Trade{
-		ID:           tradeID,
-		AccountID:    acc.ID,
-		Broker:       acc.Broker,
-		StrategyType: domain.StrategyUnknown,
-		ExecutedAt:   openedAt,
+		ID:         tradeID,
+		AccountID:  acc.ID,
+		Broker:     acc.Broker,
+		ExecutedAt: openedAt,
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
 	for i := range txns {
@@ -580,8 +579,13 @@ func TestPositionService_ChainedPositionOpenLotsCheckedByChain(t *testing.T) {
 
 // seedPositionChain creates a chain anchored to anchorTradeID and returns its ID.
 // Used in position service tests to satisfy the FK constraint on positions.chain_id.
-func seedPositionChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, anchorTradeID string) string {
+// An optional strategyType may be provided as the last argument; defaults to StrategyUnknown.
+func seedPositionChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, anchorTradeID string, strategyType ...domain.StrategyType) string {
 	t.Helper()
+	st := domain.StrategyUnknown
+	if len(strategyType) > 0 {
+		st = strategyType[0]
+	}
 	chainID := uuid.New().String()
 	chain := &domain.Chain{
 		ID:               chainID,
@@ -589,6 +593,7 @@ func seedPositionChain(t *testing.T, ctx context.Context, repos *sqlite.Repos, a
 		UnderlyingSymbol: "SPY",
 		OriginalTradeID:  anchorTradeID,
 		CreatedAt:        time.Now().UTC(),
+		StrategyType:     st,
 	}
 	require.NoError(t, repos.Chains.CreateChain(ctx, chain))
 	return chainID

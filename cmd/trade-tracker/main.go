@@ -55,13 +55,12 @@ func run() error {
 	}()
 
 	// Wire services.
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
 	positionSvc := service.NewPositionService(repos.Positions, logger)
 	importSvc := service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
 		repos.Instruments,
-		strategy.NewClassifier(),
 		chainSvc,
 		service.PostImportHook{
 			Name: "position",

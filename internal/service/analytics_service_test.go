@@ -302,22 +302,24 @@ func TestAnalyticsService_GetStrategyPerformance(t *testing.T) {
 	instB := makeEquityOption("SPY", 480, exp, domain.OptionTypePut)
 
 	// CSP trade: win $300.
-	cspTradeID, _ := openAndClose(t, ctx, repos, psvc, acc, instA,
+	_, cspChainID := openAndClose(t, ctx, repos, psvc, acc, instA,
 		"strat-001", "strat-002",
 		domain.ActionSTO, domain.ActionBTC,
 		1, 3.50, 0, 0.50, 0,
 		t1, t2,
 	)
-	require.NoError(t, repos.Trades.UpdateStrategy(ctx, cspTradeID, domain.StrategySingle))
+	_, err := repos.DB().ExecContext(ctx, `UPDATE chains SET strategy_type = ? WHERE id = ?`, string(domain.StrategySingle), cspChainID)
+	require.NoError(t, err)
 
 	// Vertical trade: loss $-200.
-	vertTradeID, _ := openAndClose(t, ctx, repos, psvc, acc, instB,
+	_, vertChainID := openAndClose(t, ctx, repos, psvc, acc, instB,
 		"strat-003", "strat-004",
 		domain.ActionSTO, domain.ActionBTC,
 		1, 1.00, 0, 3.00, 0,
 		t1, t2,
 	)
-	require.NoError(t, repos.Trades.UpdateStrategy(ctx, vertTradeID, domain.StrategyVertical))
+	_, err = repos.DB().ExecContext(ctx, `UPDATE chains SET strategy_type = ? WHERE id = ?`, string(domain.StrategyVertical), vertChainID)
+	require.NoError(t, err)
 
 	allTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	future := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)

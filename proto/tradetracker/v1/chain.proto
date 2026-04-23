@@ -58,6 +58,9 @@ message ChainDetail {
   // attribution_gap is true when this chain was started from a mixed trade whose closing legs
   // could not be attributed to an existing open chain. The closing P&L is unattributed.
   bool attribution_gap = 8;
+  // strategy_type is the domain strategy name (e.g. "single", "vertical"), classified from
+  // the opening trade's legs at chain creation and never revised on roll or close.
+  string strategy_type = 9;
 }
 
 message GetChainRequest {

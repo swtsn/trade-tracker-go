@@ -121,7 +121,8 @@ message Trade {
   string id = 1;
   string account_id = 2;
   string broker = 3;
-  StrategyType strategy_type = 4;
+  reserved 4; // was strategy_type; moved to Chain
+  reserved "strategy_type";
   string underlying_symbol = 5;
   // executed_at is the earliest ExecutedAt across the trade's transactions.
   google.protobuf.Timestamp executed_at = 6;
@@ -139,8 +140,8 @@ message ListTradesRequest {
   google.protobuf.Timestamp executed_before = 3;
   // symbol filters by underlying_symbol; empty = all symbols.
   string symbol = 4;
-  // strategy_type filters by strategy; UNSPECIFIED = all strategies.
-  StrategyType strategy_type = 5;
+  reserved 5; // was strategy_type filter; moved to Chain
+  reserved "strategy_type";
   reserved 6, 7; // were open_only and closed_only booleans; removed — not useful in practice
   reserved "open_only", "closed_only";
   // page_size caps results; server enforces a maximum of 500. Zero means use the maximum.
