@@ -56,7 +56,6 @@ func makeTestTrade(id, accountID, symbol string) domain.Trade {
 		ID:               id,
 		AccountID:        accountID,
 		Broker:           "tastytrade",
-		StrategyType:     domain.StrategySingle,
 		UnderlyingSymbol: symbol,
 		ExecutedAt:       time.Now().UTC().Truncate(time.Second),
 		Transactions:     []domain.Transaction{},
@@ -134,7 +133,6 @@ func TestGetTrade_Found(t *testing.T) {
 		ID:               "t1",
 		AccountID:        "acc1",
 		Broker:           "tastytrade",
-		StrategyType:     domain.StrategySingle,
 		UnderlyingSymbol: "SPY",
 		ExecutedAt:       time.Now().UTC().Truncate(time.Second),
 		Transactions: []domain.Transaction{

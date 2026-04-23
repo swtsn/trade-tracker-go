@@ -12,13 +12,15 @@ import (
 	"github.com/shopspring/decimal"
 	"trade-tracker-go/internal/domain"
 	"trade-tracker-go/internal/repository"
+	"trade-tracker-go/internal/strategy"
 )
 
 // ChainService runs chain detection over an account's trade history.
 type ChainService struct {
-	chains repository.ChainRepository
-	trades repository.TradeRepository
-	txns   repository.TransactionRepository
+	chains     repository.ChainRepository
+	trades     repository.TradeRepository
+	txns       repository.TransactionRepository
+	classifier StrategyClassifier
 }
 
 // NewChainService creates a ChainService with the given dependencies.
@@ -26,11 +28,13 @@ func NewChainService(
 	chains repository.ChainRepository,
 	trades repository.TradeRepository,
 	txns repository.TransactionRepository,
+	classifier StrategyClassifier,
 ) *ChainService {
 	return &ChainService{
-		chains: chains,
-		trades: trades,
-		txns:   txns,
+		chains:     chains,
+		trades:     trades,
+		txns:       txns,
+		classifier: classifier,
 	}
 }
 
@@ -65,19 +69,19 @@ func (s *ChainService) DetectChains(ctx context.Context, accountID string) error
 	})
 
 	for i := range trades {
-		if _, err := s.processTrade(ctx, &trades[i]); err != nil {
+		if _, _, err := s.processTrade(ctx, &trades[i]); err != nil {
 			return fmt.Errorf("detect chains: trade %s: %w", trades[i].ID, err)
 		}
 	}
 	return nil
 }
 
-// ProcessTrade runs chain detection for a single trade and returns the chain ID.
-// Called by ImportService as a core write step, before PositionService.
-func (s *ChainService) ProcessTrade(ctx context.Context, tradeID string) (string, error) {
+// ProcessTrade runs chain detection for a single trade and returns the chain ID and
+// strategy type burned in at chain creation. Called by ImportService as a core write step.
+func (s *ChainService) ProcessTrade(ctx context.Context, tradeID string) (string, domain.StrategyType, error) {
 	trade, err := s.trades.GetByID(ctx, tradeID)
 	if err != nil {
-		return "", fmt.Errorf("chain service process trade %s: %w", tradeID, err)
+		return "", "", fmt.Errorf("chain service process trade %s: %w", tradeID, err)
 	}
 	return s.processTrade(ctx, trade)
 }
@@ -176,21 +180,21 @@ func (s *ChainService) GetChainPnL(ctx context.Context, chainID string) (decimal
 	return s.chains.GetChainPnL(ctx, chainID)
 }
 
-// processTrade classifies one trade, applies the appropriate chain action, and returns the chain ID.
-// Returns an empty string for neutral-only trades or close-only trades with no matching open chain.
-func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (string, error) {
-	// Idempotency: if this trade is already assigned to a chain, return its ID.
+// processTrade applies the appropriate chain action and returns the chain ID and strategy type.
+// Returns empty strings for neutral-only trades or close-only trades with no matching open chain.
+func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (string, domain.StrategyType, error) {
+	// Idempotency: if this trade is already assigned to a chain, return its ID and strategy.
 	existing, err := s.chains.GetChainByTradeID(ctx, trade.ID)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
-		return "", fmt.Errorf("idempotency check: %w", err)
+		return "", "", fmt.Errorf("idempotency check: %w", err)
 	}
 	if existing != nil {
-		return existing.ID, nil
+		return existing.ID, existing.StrategyType, nil
 	}
 
 	txns, err := s.txns.ListByTrade(ctx, trade.ID)
 	if err != nil {
-		return "", fmt.Errorf("list transactions: %w", err)
+		return "", "", fmt.Errorf("list transactions: %w", err)
 	}
 
 	var hasOpening, hasClosing bool
@@ -205,7 +209,7 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 
 	if !hasClosing {
 		if !hasOpening {
-			return "", nil // neutral-only trade (e.g. dividend); nothing to chain
+			return "", "", nil // neutral-only trade (e.g. dividend); nothing to chain
 		}
 		return s.startChain(ctx, trade, txns, false)
 	}
@@ -217,7 +221,7 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 				// Close-only trade with no matching open chain — skip entirely.
 				// Typical for out-of-order imports; re-run DetectChains once the
 				// opening trade is present.
-				return "", nil
+				return "", "", nil
 			}
 			// Mixed trade (close + open) with no open chain for the closing legs.
 			// This is expected on first imports that start mid-history: the original
@@ -230,35 +234,50 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 				"trade_id", trade.ID)
 			return s.startChain(ctx, trade, txns, true)
 		}
-		return "", err
+		return "", "", err
 	}
 
 	if hasOpening {
-		return s.extendChain(ctx, trade, txns, chainID)
+		chainID, err = s.extendChain(ctx, trade, txns, chainID)
+	} else {
+		chainID, err = s.maybeCloseChain(ctx, trade, txns, chainID)
 	}
-	return s.maybeCloseChain(ctx, trade, txns, chainID)
+	if err != nil {
+		return "", "", err
+	}
+	if chainID == "" {
+		return "", "", nil
+	}
+	chain, err := s.chains.GetChainByID(ctx, chainID)
+	if err != nil {
+		return "", "", fmt.Errorf("get chain strategy: %w", err)
+	}
+	return chainID, chain.StrategyType, nil
 }
 
-// startChain creates a new Chain for an opening trade and returns the new chain ID.
+// startChain creates a new Chain for an opening trade and returns the new chain ID and strategy.
+// Strategy is classified from the opening legs of txns.
 // attributionGap should be true when the trade also has closing legs that could not be
 // attributed to an existing open chain.
-func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, attributionGap bool) (string, error) {
+func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction, attributionGap bool) (string, domain.StrategyType, error) {
 	chainID, err := uuid.NewV7()
 	if err != nil {
-		return "", fmt.Errorf("generate chain id: %w", err)
+		return "", "", fmt.Errorf("generate chain id: %w", err)
 	}
+	strategyType := s.classifier.Classify(strategy.FromTransactions(txns))
 	chain := &domain.Chain{
 		ID:               chainID.String(),
 		AccountID:        trade.AccountID,
 		UnderlyingSymbol: underlyingSymbol(txns),
 		OriginalTradeID:  trade.ID,
 		CreatedAt:        trade.ExecutedAt,
+		StrategyType:     strategyType,
 		AttributionGap:   attributionGap,
 	}
 	if err := s.chains.CreateChain(ctx, chain); err != nil {
-		return "", fmt.Errorf("start chain: %w", err)
+		return "", "", fmt.Errorf("start chain: %w", err)
 	}
-	return chain.ID, nil
+	return chain.ID, strategyType, nil
 }
 
 // extendChain records a roll or adjustment link for a mixed trade and returns the chain ID.

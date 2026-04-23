@@ -13,10 +13,11 @@ import (
 	"trade-tracker-go/internal/domain"
 	"trade-tracker-go/internal/repository/sqlite"
 	"trade-tracker-go/internal/service"
+	"trade-tracker-go/internal/strategy"
 )
 
 func newChainSvc(repos *sqlite.Repos) *service.ChainService {
-	return service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
+	return service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
 }
 
 // TestChainService_OpeningOnlyStartsChain: an opening-only trade creates a chain.
@@ -495,11 +496,10 @@ func TestChainService_MixedUnattributableStartsNewChain(t *testing.T) {
 func seedChainTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, tradeID string, openedAt time.Time, txns ...domain.Transaction) {
 	t.Helper()
 	trade := &domain.Trade{
-		ID:           tradeID,
-		AccountID:    acc.ID,
-		Broker:       acc.Broker,
-		StrategyType: domain.StrategyUnknown,
-		ExecutedAt:   openedAt,
+		ID:         tradeID,
+		AccountID:  acc.ID,
+		Broker:     acc.Broker,
+		ExecutedAt: openedAt,
 	}
 	require.NoError(t, repos.Trades.Create(ctx, trade))
 	for i := range txns {

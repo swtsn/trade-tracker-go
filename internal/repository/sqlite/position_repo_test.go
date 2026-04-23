@@ -20,7 +20,7 @@ func TestPositionRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		inst := seedEquityInstrument(t, ctx, repos, "AAPL")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 		tx := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionBuy, 10, 175, domain.PositionEffectOpening, time.Now())
 
 		lot := &domain.PositionLot{
@@ -49,7 +49,7 @@ func TestPositionRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		inst := seedEquityInstrument(t, ctx, repos, "SPY")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 
 		t0 := time.Date(2025, 1, 1, 9, 0, 0, 0, time.UTC)
 		var lotIDs []string
@@ -84,8 +84,8 @@ func TestPositionRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		inst := seedEquityInstrument(t, ctx, repos, "NVDA")
-		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
-		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade1 := seedTrade(t, ctx, repos, acc, time.Now())
+		trade2 := seedTrade(t, ctx, repos, acc, time.Now())
 
 		tx1 := seedTransaction(t, ctx, repos, acc, trade1, inst, domain.ActionBuy, 5, 900, domain.PositionEffectOpening, time.Now())
 		tx2 := seedTransaction(t, ctx, repos, acc, trade2, inst, domain.ActionBuy, 3, 920, domain.PositionEffectOpening, time.Now())
@@ -118,7 +118,7 @@ func TestPositionRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		inst := seedEquityInstrument(t, ctx, repos, "NVDA")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 		openTx := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionBuy, 10, 900, domain.PositionEffectOpening, time.Now())
 		closeTx1 := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionSell, 4, 950, domain.PositionEffectClosing, time.Now().Add(time.Hour))
 		closeTx2 := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionSell, 6, 960, domain.PositionEffectClosing, time.Now().Add(2*time.Hour))
@@ -188,7 +188,7 @@ func TestPositionRepository(t *testing.T) {
 	t.Run("create and get position by trade id", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 
 		pos := &domain.Position{
 			ID:                 uuid.New().String(),
@@ -227,8 +227,8 @@ func TestPositionRepository(t *testing.T) {
 	t.Run("list open positions", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade1 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
-		trade2 := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade1 := seedTrade(t, ctx, repos, acc, time.Now())
+		trade2 := seedTrade(t, ctx, repos, acc, time.Now())
 
 		now := time.Now().UTC().Truncate(time.Second)
 		closedAt := now.Add(time.Hour)
@@ -257,7 +257,7 @@ func TestPositionRepository(t *testing.T) {
 	t.Run("get position by chain id", func(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 		chain := seedChain(t, ctx, repos, acc, trade)
 
 		chainID := chain.ID
@@ -284,7 +284,7 @@ func TestPositionRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		acc2 := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 
 		pos := &domain.Position{
 			ID:                 uuid.New().String(),
@@ -317,7 +317,7 @@ func TestPositionRepository(t *testing.T) {
 		acc := seedAccount(t, ctx, repos)
 		inst := seedOptionInstrument(t, ctx, repos, "SPY", 500, domain.OptionTypePut, time.Date(2025, 12, 19, 0, 0, 0, 0, time.UTC))
 		stockInst := seedEquityInstrument(t, ctx, repos, "SPY")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategySingle, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 
 		openTx := seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionSTO, 1, 3.50, domain.PositionEffectOpening, time.Now())
 		closeTx := seedTransaction(t, ctx, repos, acc, trade, stockInst, domain.ActionAssignment, 100, 500, domain.PositionEffectClosing, time.Now().Add(time.Hour))

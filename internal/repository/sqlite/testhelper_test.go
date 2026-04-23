@@ -68,13 +68,12 @@ func seedOptionInstrument(t *testing.T, ctx context.Context, repos *sqlite.Repos
 }
 
 // seedTrade creates a trade (without transactions).
-func seedTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, strategy domain.StrategyType, openedAt time.Time) *domain.Trade {
+func seedTrade(t *testing.T, ctx context.Context, repos *sqlite.Repos, acc *domain.Account, openedAt time.Time) *domain.Trade {
 	t.Helper()
 	trade := &domain.Trade{
 		ID:               uuid.New().String(),
 		AccountID:        acc.ID,
 		Broker:           acc.Broker,
-		StrategyType:     strategy,
 		UnderlyingSymbol: "TEST",
 		ExecutedAt:       openedAt.UTC().Truncate(time.Second),
 		Notes:            "",

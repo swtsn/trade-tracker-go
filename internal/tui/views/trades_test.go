@@ -20,7 +20,6 @@ func TestTradesView_Load(t *testing.T) {
 				{
 					Id:               "t1",
 					UnderlyingSymbol: "SPY",
-					StrategyType:     pb.StrategyType_STRATEGY_TYPE_VERTICAL,
 					ExecutedAt:       timestamppb.Now(),
 				},
 			},
@@ -40,7 +39,6 @@ func TestTradesView_Load(t *testing.T) {
 
 	rendered := v.View()
 	assert.Contains(t, rendered, "SPY")
-	assert.Contains(t, rendered, "Vert")
 }
 
 func TestTradesView_SymbolFilterRoundTrip(t *testing.T) {

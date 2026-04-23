@@ -693,7 +693,6 @@ type Trade struct {
 	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	AccountId        string                 `protobuf:"bytes,2,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	Broker           string                 `protobuf:"bytes,3,opt,name=broker,proto3" json:"broker,omitempty"`
-	StrategyType     StrategyType           `protobuf:"varint,4,opt,name=strategy_type,json=strategyType,proto3,enum=tradetracker.v1.StrategyType" json:"strategy_type,omitempty"`
 	UnderlyingSymbol string                 `protobuf:"bytes,5,opt,name=underlying_symbol,json=underlyingSymbol,proto3" json:"underlying_symbol,omitempty"`
 	// executed_at is the earliest ExecutedAt across the trade's transactions.
 	ExecutedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
@@ -754,13 +753,6 @@ func (x *Trade) GetBroker() string {
 	return ""
 }
 
-func (x *Trade) GetStrategyType() StrategyType {
-	if x != nil {
-		return x.StrategyType
-	}
-	return StrategyType_STRATEGY_TYPE_UNSPECIFIED
-}
-
 func (x *Trade) GetUnderlyingSymbol() string {
 	if x != nil {
 		return x.UnderlyingSymbol
@@ -798,8 +790,6 @@ type ListTradesRequest struct {
 	ExecutedBefore *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=executed_before,json=executedBefore,proto3" json:"executed_before,omitempty"`
 	// symbol filters by underlying_symbol; empty = all symbols.
 	Symbol string `protobuf:"bytes,4,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	// strategy_type filters by strategy; UNSPECIFIED = all strategies.
-	StrategyType StrategyType `protobuf:"varint,5,opt,name=strategy_type,json=strategyType,proto3,enum=tradetracker.v1.StrategyType" json:"strategy_type,omitempty"`
 	// page_size caps results; server enforces a maximum of 500. Zero means use the maximum.
 	// page_token is reserved for future cursor-based pagination.
 	PageSize      int32  `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -864,13 +854,6 @@ func (x *ListTradesRequest) GetSymbol() string {
 		return x.Symbol
 	}
 	return ""
-}
-
-func (x *ListTradesRequest) GetStrategyType() StrategyType {
-	if x != nil {
-		return x.StrategyType
-	}
-	return StrategyType_STRATEGY_TYPE_UNSPECIFIED
 }
 
 func (x *ListTradesRequest) GetPageSize() int32 {
@@ -1092,28 +1075,26 @@ const file_tradetracker_v1_trade_proto_rawDesc = "" +
 	"\x04fees\x18\v \x01(\tR\x04fees\x12;\n" +
 	"\vexecuted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"executedAt\x12H\n" +
-	"\x0fposition_effect\x18\r \x01(\x0e2\x1f.tradetracker.v1.PositionEffectR\x0epositionEffect\"\xe5\x02\n" +
+	"\x0fposition_effect\x18\r \x01(\x0e2\x1f.tradetracker.v1.PositionEffectR\x0epositionEffect\"\xb6\x02\n" +
 	"\x05Trade\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x02 \x01(\tR\taccountId\x12\x16\n" +
-	"\x06broker\x18\x03 \x01(\tR\x06broker\x12B\n" +
-	"\rstrategy_type\x18\x04 \x01(\x0e2\x1d.tradetracker.v1.StrategyTypeR\fstrategyType\x12+\n" +
+	"\x06broker\x18\x03 \x01(\tR\x06broker\x12+\n" +
 	"\x11underlying_symbol\x18\x05 \x01(\tR\x10underlyingSymbol\x12;\n" +
 	"\vexecuted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"executedAt\x12\x14\n" +
 	"\x05notes\x18\b \x01(\tR\x05notes\x12@\n" +
-	"\ftransactions\x18\t \x03(\v2\x1c.tradetracker.v1.TransactionR\ftransactionsJ\x04\b\a\x10\bR\tclosed_at\"\xf6\x02\n" +
+	"\ftransactions\x18\t \x03(\v2\x1c.tradetracker.v1.TransactionR\ftransactionsJ\x04\b\x04\x10\x05J\x04\b\a\x10\bR\rstrategy_typeR\tclosed_at\"\xc7\x02\n" +
 	"\x11ListTradesRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12A\n" +
 	"\x0eexecuted_after\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rexecutedAfter\x12C\n" +
 	"\x0fexecuted_before\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0eexecutedBefore\x12\x16\n" +
-	"\x06symbol\x18\x04 \x01(\tR\x06symbol\x12B\n" +
-	"\rstrategy_type\x18\x05 \x01(\x0e2\x1d.tradetracker.v1.StrategyTypeR\fstrategyType\x12\x1b\n" +
+	"\x06symbol\x18\x04 \x01(\tR\x06symbol\x12\x1b\n" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\t \x01(\tR\tpageTokenJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\topen_onlyR\vclosed_only\"\x82\x01\n" +
+	"page_token\x18\t \x01(\tR\tpageTokenJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bR\rstrategy_typeR\topen_onlyR\vclosed_only\"\x82\x01\n" +
 	"\x12ListTradesResponse\x12.\n" +
 	"\x06trades\x18\x01 \x03(\v2\x16.tradetracker.v1.TradeR\x06trades\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x03R\x05total\x12&\n" +
@@ -1223,23 +1204,21 @@ var file_tradetracker_v1_trade_proto_depIdxs = []int32{
 	1,  // 7: tradetracker.v1.Transaction.action:type_name -> tradetracker.v1.Action
 	14, // 8: tradetracker.v1.Transaction.executed_at:type_name -> google.protobuf.Timestamp
 	2,  // 9: tradetracker.v1.Transaction.position_effect:type_name -> tradetracker.v1.PositionEffect
-	0,  // 10: tradetracker.v1.Trade.strategy_type:type_name -> tradetracker.v1.StrategyType
-	14, // 11: tradetracker.v1.Trade.executed_at:type_name -> google.protobuf.Timestamp
-	8,  // 12: tradetracker.v1.Trade.transactions:type_name -> tradetracker.v1.Transaction
-	14, // 13: tradetracker.v1.ListTradesRequest.executed_after:type_name -> google.protobuf.Timestamp
-	14, // 14: tradetracker.v1.ListTradesRequest.executed_before:type_name -> google.protobuf.Timestamp
-	0,  // 15: tradetracker.v1.ListTradesRequest.strategy_type:type_name -> tradetracker.v1.StrategyType
-	9,  // 16: tradetracker.v1.ListTradesResponse.trades:type_name -> tradetracker.v1.Trade
-	9,  // 17: tradetracker.v1.GetTradeResponse.trade:type_name -> tradetracker.v1.Trade
-	10, // 18: tradetracker.v1.TradeService.ListTrades:input_type -> tradetracker.v1.ListTradesRequest
-	12, // 19: tradetracker.v1.TradeService.GetTrade:input_type -> tradetracker.v1.GetTradeRequest
-	11, // 20: tradetracker.v1.TradeService.ListTrades:output_type -> tradetracker.v1.ListTradesResponse
-	13, // 21: tradetracker.v1.TradeService.GetTrade:output_type -> tradetracker.v1.GetTradeResponse
-	20, // [20:22] is the sub-list for method output_type
-	18, // [18:20] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	14, // 10: tradetracker.v1.Trade.executed_at:type_name -> google.protobuf.Timestamp
+	8,  // 11: tradetracker.v1.Trade.transactions:type_name -> tradetracker.v1.Transaction
+	14, // 12: tradetracker.v1.ListTradesRequest.executed_after:type_name -> google.protobuf.Timestamp
+	14, // 13: tradetracker.v1.ListTradesRequest.executed_before:type_name -> google.protobuf.Timestamp
+	9,  // 14: tradetracker.v1.ListTradesResponse.trades:type_name -> tradetracker.v1.Trade
+	9,  // 15: tradetracker.v1.GetTradeResponse.trade:type_name -> tradetracker.v1.Trade
+	10, // 16: tradetracker.v1.TradeService.ListTrades:input_type -> tradetracker.v1.ListTradesRequest
+	12, // 17: tradetracker.v1.TradeService.GetTrade:input_type -> tradetracker.v1.GetTradeRequest
+	11, // 18: tradetracker.v1.TradeService.ListTrades:output_type -> tradetracker.v1.ListTradesResponse
+	13, // 19: tradetracker.v1.TradeService.GetTrade:output_type -> tradetracker.v1.GetTradeResponse
+	18, // [18:20] is the sub-list for method output_type
+	16, // [16:18] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_tradetracker_v1_trade_proto_init() }

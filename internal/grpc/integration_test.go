@@ -60,13 +60,12 @@ func startSmokeServer(t *testing.T) *smokeStack {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = repos.Close() })
 
-	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions)
+	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
 	positionSvc := service.NewPositionService(repos.Positions, testLogger)
 	importSvc := service.NewImportService(
 		repos.Trades,
 		repos.Transactions,
 		repos.Instruments,
-		strategy.NewClassifier(),
 		chainSvc,
 		service.PostImportHook{Name: "position", Run: positionSvc.ProcessTrade},
 	)

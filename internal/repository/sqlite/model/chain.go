@@ -17,6 +17,7 @@ type Chain struct {
 	OriginalTradeID  string
 	CreatedAt        string
 	ClosedAt         sql.NullString
+	StrategyType     string
 	AttributionGap   int // 0 = false, 1 = true
 }
 
@@ -33,6 +34,7 @@ func (s Chain) ToDomain() (domain.Chain, error) {
 		UnderlyingSymbol: s.UnderlyingSymbol,
 		OriginalTradeID:  s.OriginalTradeID,
 		CreatedAt:        createdAt,
+		StrategyType:     domain.StrategyType(s.StrategyType),
 		AttributionGap:   s.AttributionGap != 0,
 	}
 	if s.ClosedAt.Valid {
@@ -53,6 +55,7 @@ func ChainToStorage(chain domain.Chain) Chain {
 		UnderlyingSymbol: chain.UnderlyingSymbol,
 		OriginalTradeID:  chain.OriginalTradeID,
 		CreatedAt:        chain.CreatedAt.UTC().Format(time.RFC3339),
+		StrategyType:     string(chain.StrategyType),
 	}
 	if chain.ClosedAt != nil {
 		s.ClosedAt = sql.NullString{String: chain.ClosedAt.UTC().Format(time.RFC3339), Valid: true}

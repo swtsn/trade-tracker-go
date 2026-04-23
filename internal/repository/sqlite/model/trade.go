@@ -12,7 +12,6 @@ type Trade struct {
 	ID               string
 	AccountID        string
 	Broker           string
-	StrategyType     string
 	UnderlyingSymbol string
 	ExecutedAt       string
 	Notes            string
@@ -30,7 +29,6 @@ func (s Trade) ToDomain() (domain.Trade, error) {
 		ID:               s.ID,
 		AccountID:        s.AccountID,
 		Broker:           s.Broker,
-		StrategyType:     domain.StrategyType(s.StrategyType),
 		UnderlyingSymbol: s.UnderlyingSymbol,
 		ExecutedAt:       executedAt,
 		Notes:            s.Notes,
@@ -44,7 +42,6 @@ func TradeToStorage(trade domain.Trade, now time.Time) Trade {
 		ID:               trade.ID,
 		AccountID:        trade.AccountID,
 		Broker:           trade.Broker,
-		StrategyType:     string(trade.StrategyType),
 		UnderlyingSymbol: trade.UnderlyingSymbol,
 		ExecutedAt:       trade.ExecutedAt.UTC().Format(time.RFC3339),
 		Notes:            trade.Notes,

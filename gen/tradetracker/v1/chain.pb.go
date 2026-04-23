@@ -240,8 +240,11 @@ type ChainDetail struct {
 	// attribution_gap is true when this chain was started from a mixed trade whose closing legs
 	// could not be attributed to an existing open chain. The closing P&L is unattributed.
 	AttributionGap bool `protobuf:"varint,8,opt,name=attribution_gap,json=attributionGap,proto3" json:"attribution_gap,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// strategy_type is the domain strategy name (e.g. "single", "vertical"), classified from
+	// the opening trade's legs at chain creation and never revised on roll or close.
+	StrategyType  string `protobuf:"bytes,9,opt,name=strategy_type,json=strategyType,proto3" json:"strategy_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChainDetail) Reset() {
@@ -328,6 +331,13 @@ func (x *ChainDetail) GetAttributionGap() bool {
 		return x.AttributionGap
 	}
 	return false
+}
+
+func (x *ChainDetail) GetStrategyType() string {
+	if x != nil {
+		return x.StrategyType
+	}
+	return ""
 }
 
 type GetChainRequest struct {
@@ -446,7 +456,7 @@ const file_tradetracker_v1_chain_proto_rawDesc = "" +
 	"\fcredit_debit\x18\x03 \x01(\tR\vcreditDebit\x12;\n" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"executedAt\x122\n" +
-	"\x04legs\x18\x05 \x03(\v2\x1e.tradetracker.v1.ChainEventLegR\x04legs\"\xde\x02\n" +
+	"\x04legs\x18\x05 \x03(\v2\x1e.tradetracker.v1.ChainEventLegR\x04legs\"\x83\x03\n" +
 	"\vChainDetail\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -457,7 +467,8 @@ const file_tradetracker_v1_chain_proto_rawDesc = "" +
 	"\tclosed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x12!\n" +
 	"\frealized_pnl\x18\x06 \x01(\tR\vrealizedPnl\x123\n" +
 	"\x06events\x18\a \x03(\v2\x1b.tradetracker.v1.ChainEventR\x06events\x12'\n" +
-	"\x0fattribution_gap\x18\b \x01(\bR\x0eattributionGap\"@\n" +
+	"\x0fattribution_gap\x18\b \x01(\bR\x0eattributionGap\x12#\n" +
+	"\rstrategy_type\x18\t \x01(\tR\fstrategyType\"@\n" +
 	"\x0fGetChainRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x0e\n" +

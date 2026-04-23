@@ -19,14 +19,13 @@ func TestTradeRepository(t *testing.T) {
 		repos := openTestDB(t)
 		acc := seedAccount(t, ctx, repos)
 		inst := seedEquityInstrument(t, ctx, repos, "AAPL")
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyStock, time.Now())
+		trade := seedTrade(t, ctx, repos, acc, time.Now())
 		seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionBuy, 10, 175, domain.PositionEffectOpening, time.Now())
 		seedTransaction(t, ctx, repos, acc, trade, inst, domain.ActionSell, 10, 180, domain.PositionEffectClosing, time.Now().Add(time.Hour))
 
 		got, err := repos.Trades.GetByID(ctx, trade.ID)
 		require.NoError(t, err)
 		assert.Equal(t, trade.ID, got.ID)
-		assert.Equal(t, domain.StrategyStock, got.StrategyType)
 		assert.Len(t, got.Transactions, 2)
 	})
 
@@ -41,7 +40,7 @@ func TestTradeRepository(t *testing.T) {
 		acc := seedAccount(t, ctx, repos)
 		t0 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 		for i := range 5 {
-			seedTrade(t, ctx, repos, acc, domain.StrategyStock, t0.Add(time.Duration(i)*24*time.Hour))
+			seedTrade(t, ctx, repos, acc, t0.Add(time.Duration(i)*24*time.Hour))
 		}
 
 		trades, total, err := repos.Trades.ListByAccount(ctx, acc.ID, repository.ListTradesOptions{Limit: 3, Offset: 0})
@@ -55,14 +54,4 @@ func TestTradeRepository(t *testing.T) {
 		assert.Len(t, trades2, 2)
 	})
 
-	t.Run("update strategy", func(t *testing.T) {
-		repos := openTestDB(t)
-		acc := seedAccount(t, ctx, repos)
-		trade := seedTrade(t, ctx, repos, acc, domain.StrategyUnknown, time.Now())
-
-		require.NoError(t, repos.Trades.UpdateStrategy(ctx, trade.ID, domain.StrategySingle))
-		got, err := repos.Trades.GetByID(ctx, trade.ID)
-		require.NoError(t, err)
-		assert.Equal(t, domain.StrategySingle, got.StrategyType)
-	})
 }
