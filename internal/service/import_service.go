@@ -13,7 +13,7 @@ import (
 // Name identifies the hook in ImportResult.Errors when the hook fails.
 type PostImportHook struct {
 	Name string
-	Run  func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error
+	Run  func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error
 }
 
 // ImportResult summarizes the outcome of an Import call.
@@ -214,7 +214,7 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	// reporting hook reads), so continuing after a failure would observe corrupt state.
 	hookFailed := false
 	for _, hook := range s.hooks {
-		if err := hook.Run(ctx, trade.ID, orderedTxs, chainID); err != nil {
+		if err := hook.Run(ctx, trade.ID, orderedTxs, chainID, strategyType); err != nil {
 			hookFailed = true
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{

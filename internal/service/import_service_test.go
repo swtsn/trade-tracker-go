@@ -215,7 +215,7 @@ func TestImportService_HookCalled(t *testing.T) {
 	var hookTradeIDs []string
 	hook := service.PostImportHook{
 		Name: "capture",
-		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error {
 			hookTradeIDs = append(hookTradeIDs, tradeID)
 			return nil
 		},
@@ -241,7 +241,7 @@ func TestImportService_HookErrorRecorded(t *testing.T) {
 
 	hook := service.PostImportHook{
 		Name: "failing-hook",
-		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+		Run: func(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error {
 			return errors.New("hook exploded")
 		},
 	}

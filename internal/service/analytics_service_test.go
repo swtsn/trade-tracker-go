@@ -45,14 +45,14 @@ func openAndClose(
 	openTx.Fees = decimal.NewFromFloat(openFees)
 	seedPositionTrade(t, ctx, repos, acc, tradeID, openedAt, openTx)
 	chainID = seedPositionChain(t, ctx, repos, acc, tradeID)
-	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{openTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{openTx}, chainID, domain.StrategyUnknown))
 
 	closeTxTradeID := uuid.New().String()
 	closeTx := makeTransaction(closeTxTradeID, closeBTID, acc.ID, acc.Broker, inst, closeAction, domain.PositionEffectClosing, qty, closedAt)
 	closeTx.FillPrice = decimal.NewFromFloat(closePrice)
 	closeTx.Fees = decimal.NewFromFloat(closeFees)
 	seedPositionTrade(t, ctx, repos, acc, closeTxTradeID, closedAt, closeTx)
-	require.NoError(t, svc.ProcessTrade(ctx, closeTxTradeID, []domain.Transaction{closeTx}, chainID))
+	require.NoError(t, svc.ProcessTrade(ctx, closeTxTradeID, []domain.Transaction{closeTx}, chainID, domain.StrategyUnknown))
 
 	return tradeID, chainID
 }

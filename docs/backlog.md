@@ -1,29 +1,23 @@
 # Backlog
-
 Items explicitly deferred from current phases.
 
 ## Prioritized Backlog
 
-### 1. Trade open/close status is a data model smell
+### 1. Migrate strategy from trade to chain
 
-In the trades view, a trade can appear as "open" or "closed" and can show `?` for status when it represents only closing transactions with no recorded open. This is a model design issue: a **trade** is a one-time grouping of transactions and does not inherently have an open/close state — that concept belongs exclusively on **position**. The current status display is inferred from whether there are closing transactions without a matching open, which is fragile and misleading.
+`strategy_type` currently lives on the `trade` row and propagates upward to chains and positions. This is the wrong home: a trade is a point-in-time event (one broker order), and its "strategy" is only meaningful if it's a pure opening trade. Closing trades, rolls, and assignments have no coherent strategy of their own — they are actions on an existing position. The chain is the right owner because it represents the full lifecycle of a position.
 
-Design and fix this:
-- Remove the open/closed status column from the trades view. Trades should be displayed without a lifecycle status; only positions have that concept.
-- The `?` case arises when a closing trade was imported but no open transaction exists in the log (e.g. history started mid-trade). This is not a trade status but an attribution gap. It should be surfaced differently — possibly as a warning on the chain or position rather than a trade status.
-- Audit the `Trade` proto and domain model: if `opened_at` / `closed_at` are only meaningful for display grouping (not semantics), clarify their meaning in comments. If they're vestigial lifecycle fields, consider removing them from the trade layer.
-- Related: a close-only trade with no open chain currently starts a new orphaned chain. The manual chain-stitching item in the unprioritized backlog covers the recovery path.
+Scope of this item (first pass only):
 
-### 2. Strategy alignment between trades and positions views
+- Remove `strategy_type` from the `trades` table and `Trade` domain struct. Remove `TradeRepo.UpdateStrategy` and the `strategy_service` upgrade step from the import pipeline.
+- Add `strategy_type` to the `chains` table and `Chain` domain struct.
+- Classify strategy once, when a chain is **created**, using the leg shapes of the opening trade that triggered chain creation. No re-classification on roll or close.
+- Update all read paths (positions, analytics, TUI) that currently source `strategy_type` from trade to source it from chain instead.
+- The existing `StrategyType` enum and `strategy.Classifier` are unchanged — only where classification is stored and when it is called changes.
 
-The trades view correctly recognises `STRATEGY_TYPE_STOCK`, but the positions view shows `?` for the same underlying. Strategy type is determined at trade-grouping time and stored on the trade; positions inherit strategy type from the chain. The mismatch suggests that stock (and possibly futures) positions are not being assigned a strategy type when the position is created or updated.
+Out of scope for this pass: re-classification when the position shape changes (e.g. a lone short call later becoming a covered call as stock is acquired). That belongs in the unprioritized backlog item "Strategy re-derivation from live lot state."
 
-Plan (do not implement yet — needs design):
-- Trace how `strategy_type` flows from transaction → trade → chain → position for stock/equity trades. Identify where it is lost.
-- Note that strategies involving stock or futures contracts may need different handling from pure-options positions: lot quantity semantics differ (shares vs. contracts × multiplier), cost basis meaning differs, and P&L attribution may need separate logic. Any alignment work should not assume parity with options-only strategies.
-- Proposed fix direction: ensure `PositionService` propagates the resolved `strategy_type` from the trade onto the position at creation/update, rather than re-deriving it (which may fail for stock legs that don't match options-oriented classifiers).
-
-### 3. TUI navigation: positions → chain, trades → transactions
+### 2. TUI navigation: positions → chain, trades → transactions
 
 Both relationships are tracked in the data model but are not yet surfaced in the TUI:
 - `Position.chain_id` exists and is populated — there is no UI path to view a position's chain or the other positions within it.
@@ -34,7 +28,7 @@ Items:
 - **Trades → transaction legs**: from the trades view, pressing Enter on a row should expand or navigate to a leg view listing each transaction (symbol, action, quantity, fill price, fees, executed_at).
 - Neither requires new API endpoints. `GetChain(account_id, chain_id)` already exists and returns full chain detail including all events and legs. `Trade.transactions` is already embedded in `ListTrades` / `GetTrade` responses. The work is purely in TUI view construction and navigation wiring.
 
-### 4. TUI polish
+### 3. TUI polish
 
 Make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
 
@@ -66,7 +60,7 @@ Make the TUI prettier. Colors, layout, spacing, and table styles are functional 
 - **`computeStrikeExpChange` DST comment** — in `internal/service/chain_service.go`, the expiration-change day arithmetic truncates both timestamps to UTC midnight before subtracting, which makes DST a non-issue. This is not obvious and should get a one-line comment confirming it once the function is next touched.
 - **Chain auto-detection** — automatically linking covered calls (and similar) to an existing chain when opened on an underlying with an active chain. Deferred in favor of manual linking only.
 - **Manual chain stitching** — when a mixed trade (close+open) is imported with no matching open chain (e.g. first import starting mid-history), `ChainService` starts a new chain from the opening legs and logs a warning. The closing legs' P&L remains unattributed. Two recovery paths are needed: (1) a UI or admin RPC to manually merge two chains (stitching the orphaned chain onto the original), and (2) re-running `DetectChains` after importing earlier history that contains the original opening trade. For path (2), `DetectChains` needs to handle the case where the trade already has a chain (currently idempotent-skipped) but that chain was started in error — possibly by comparing chain `created_at` against imported trades whose `opened_at` predates the chain, to detect retroactive attribution opportunities.
-- **CoveredCall strategy reclassification** — when a call is sold against equity held in a prior order, the classifier sees only a single short call and correctly labels it CSP or Single. It cannot detect the covered relationship without position context (knowing an open long equity lot exists for the same underlying). For now, an operator must manually reclassify the trade. A future `StrategyService.Upgrade()` pass could inspect open lots and promote lone short calls to CoveredCall where a matching equity lot exists.
+- **Strategy re-derivation from live lot state** — a position's strategy is burned in from the opening trade and never revised. For positions that are rolled significantly over their lifetime (e.g. a single put that becomes a vertical, or a short call added to existing stock), the stored strategy type will lag the actual current shape. `strategy.FromLots()` already converts open lots to leg shapes; a periodic or on-demand re-classification pass could compare the current lot shape against the stored strategy and update if it has changed. A specific case: when a call is sold against equity held in a prior order, the classifier sees only a single short call (CoveredCall cannot be detected without position context). A re-classification pass could inspect open lots and promote lone short calls to CoveredCall where a matching equity lot exists for the same underlying.
 - **Chain service closed-chain skip** — question: what is the cheapest way to skip closed chains during `DetectChains`? Options include an in-memory set of closed chain IDs loaded at startup or a covering index on `chains(closed_at)`. Needs investigation.
 - **Chain P&L incremental update** — chain P&L is currently computed on read via transaction arithmetic (sum across all transactions in the chain's trades). A performance improvement would be to maintain a running total on the `chains` row, updated each time a chain link is created, avoiding the full aggregation query on every read.
 - **`GetWinRate` implementation** — `GetWinRate` currently delegates to `GetPnLSummary`, which issues two DB queries (lot closings for P&L/fees, positions for win-rate counts) and discards most of the result. `GetWinRate` only needs the positions query. Refactor so each analytics method issues only the queries it requires, rather than composing through a heavier aggregate method.
