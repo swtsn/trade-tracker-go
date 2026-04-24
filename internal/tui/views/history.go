@@ -45,7 +45,7 @@ func (v HistoryView) Update(msg tea.Msg, state SharedState) (HistoryView, tea.Cm
 			return v, nil
 		}
 		v.positions = msg.positions
-		v.table = buildPositionsTable(msg.positions, v.width, v.height, false)
+		v.table = buildPositionsTable(msg.positions, nil, nil, v.width, v.height, false)
 		return v, nil
 
 	case tea.KeyMsg:
@@ -72,7 +72,7 @@ func (v *HistoryView) Resize(w, h int) {
 	v.width = w
 	v.height = h
 	if len(v.positions) > 0 {
-		v.table = buildPositionsTable(v.positions, w, h, false)
+		v.table = buildPositionsTable(v.positions, nil, nil, w, h, false)
 	}
 }
 
