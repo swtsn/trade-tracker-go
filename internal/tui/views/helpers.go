@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+
+	pb "trade-tracker-go/gen/tradetracker/v1"
 )
 
 func defaultTableStyles() table.Styles {
@@ -114,4 +116,55 @@ func strategyLabel(name string) string {
 		return l
 	}
 	return name
+}
+
+// formatAction returns a short label for an Action enum value.
+func formatAction(a pb.Action) string {
+	switch a {
+	case pb.Action_ACTION_BTO:
+		return "BTO"
+	case pb.Action_ACTION_STO:
+		return "STO"
+	case pb.Action_ACTION_BTC:
+		return "BTC"
+	case pb.Action_ACTION_STC:
+		return "STC"
+	case pb.Action_ACTION_BUY:
+		return "Buy"
+	case pb.Action_ACTION_SELL:
+		return "Sell"
+	case pb.Action_ACTION_ASSIGNMENT:
+		return "Assign"
+	case pb.Action_ACTION_EXPIRATION:
+		return "Expire"
+	case pb.Action_ACTION_EXERCISE:
+		return "Exercise"
+	default:
+		return "?"
+	}
+}
+
+// formatInstrument returns a short human-readable description of an instrument.
+// Options: "SPX 4500C 01/31"; equity: "AAPL".
+func formatInstrument(inst *pb.Instrument) string {
+	if inst == nil {
+		return "—"
+	}
+	switch inst.AssetClass {
+	case pb.AssetClass_ASSET_CLASS_EQUITY_OPTION, pb.AssetClass_ASSET_CLASS_FUTURE_OPTION:
+		if inst.Option == nil {
+			return inst.Symbol
+		}
+		optType := "C"
+		if inst.Option.OptionType == pb.OptionType_OPTION_TYPE_PUT {
+			optType = "P"
+		}
+		exp := ""
+		if inst.Option.Expiration != nil {
+			exp = " " + inst.Option.Expiration.AsTime().Format("01/02")
+		}
+		return fmt.Sprintf("%s %s%s%s", inst.Symbol, inst.Option.Strike, optType, exp)
+	default:
+		return inst.Symbol
+	}
 }

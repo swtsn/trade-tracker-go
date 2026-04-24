@@ -3,6 +3,7 @@ package views
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -30,13 +31,14 @@ type TradesView struct {
 	err          error
 	width        int
 	height       int
+	expanded     map[int]bool // set of expanded trade indices
 }
 
 func NewTradesView(c client.Client) TradesView {
 	ti := textinput.New()
 	ti.Placeholder = "symbol filter"
 	ti.CharLimit = 10
-	return TradesView{client: c, loading: true, filterInput: ti}
+	return TradesView{client: c, loading: true, filterInput: ti, expanded: make(map[int]bool)}
 }
 
 func (v TradesView) Update(msg tea.Msg, state SharedState) (TradesView, tea.Cmd) {
@@ -44,6 +46,7 @@ func (v TradesView) Update(msg tea.Msg, state SharedState) (TradesView, tea.Cmd)
 	case LoadMsg:
 		v.loading = true
 		v.err = nil
+		v.expanded = make(map[int]bool)
 		return v, v.load(state)
 
 	case tradesLoadedMsg:
@@ -53,7 +56,8 @@ func (v TradesView) Update(msg tea.Msg, state SharedState) (TradesView, tea.Cmd)
 			return v, nil
 		}
 		v.trades = msg.trades
-		v.table = buildTradesTable(msg.trades, v.width, v.height)
+		v.expanded = make(map[int]bool)
+		v.table = buildTradesTable(v.trades, v.expanded, v.width, v.height)
 		return v, nil
 
 	case tea.KeyMsg:
@@ -63,11 +67,9 @@ func (v TradesView) Update(msg tea.Msg, state SharedState) (TradesView, tea.Cmd)
 				v.symbolFilter = v.filterInput.Value()
 				v.filterInput.Blur()
 				v.filterOpen = false
-				// Re-load with the new filter.
 				v.loading = true
 				return v, v.load(state)
 			case "esc":
-				// Cancel: restore previous filter value without reloading.
 				v.filterInput.Blur()
 				v.filterOpen = false
 				return v, nil
@@ -78,24 +80,58 @@ func (v TradesView) Update(msg tea.Msg, state SharedState) (TradesView, tea.Cmd)
 			}
 		}
 		switch msg.String() {
+		case "enter":
+			if !v.loading && v.err == nil && len(v.trades) > 0 {
+				cursor := v.table.Cursor()
+				tradeIdx := tradeIdxAtCursor(v.trades, v.expanded, cursor)
+				if tradeIdx < 0 {
+					return v, nil // on a detail row
+				}
+				if v.expanded[tradeIdx] {
+					delete(v.expanded, tradeIdx)
+					v.table = buildTradesTable(v.trades, v.expanded, v.width, v.height)
+					v.table.SetCursor(tradeIdx)
+				} else {
+					v.expanded[tradeIdx] = true
+					v.table = buildTradesTable(v.trades, v.expanded, v.width, v.height)
+					v.table.SetCursor(cursor)
+				}
+			}
+			return v, nil
+		case "e":
+			if !v.loading && v.err == nil {
+				for i := range v.trades {
+					v.expanded[i] = true
+				}
+				cursor := v.table.Cursor()
+				v.table = buildTradesTable(v.trades, v.expanded, v.width, v.height)
+				v.table.SetCursor(cursor)
+			}
+			return v, nil
+		case "esc":
+			if len(v.expanded) > 0 {
+				cursor := v.table.Cursor()
+				v.expanded = make(map[int]bool)
+				v.table = buildTradesTable(v.trades, v.expanded, v.width, v.height)
+				v.table.SetCursor(cursor)
+				return v, nil
+			}
 		case "/":
 			v.filterOpen = true
 			v.filterInput.SetValue(v.symbolFilter)
 			v.filterInput.Focus()
 			return v, textinput.Blink
-		default:
-			if !v.loading && v.err == nil {
-				var cmd tea.Cmd
-				v.table, cmd = v.table.Update(msg)
-				return v, cmd
-			}
+		}
+		if !v.loading && v.err == nil {
+			var cmd tea.Cmd
+			v.table, cmd = v.table.Update(msg)
+			return v, cmd
 		}
 	}
 	return v, nil
 }
 
-// InputActive reports whether the view is currently capturing keyboard input
-// for a text field. When true, the root app must not intercept global hotkeys.
+// InputActive reports whether the view is capturing keyboard input for a text field.
 func (v TradesView) InputActive() bool { return v.filterOpen }
 
 func (v TradesView) View() string {
@@ -126,7 +162,9 @@ func (v *TradesView) Resize(w, h int) {
 	v.width = w
 	v.height = h
 	if len(v.trades) > 0 {
-		v.table = buildTradesTable(v.trades, w, h)
+		cursor := v.table.Cursor()
+		v.table = buildTradesTable(v.trades, v.expanded, w, h)
+		v.table.SetCursor(cursor)
 	}
 }
 
@@ -155,23 +193,53 @@ func (v TradesView) load(state SharedState) tea.Cmd {
 	}
 }
 
-func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
+// tradeIdxAtCursor maps a table cursor back to the trade index,
+// accounting for all injected detail rows. Returns -1 if on a detail row.
+func tradeIdxAtCursor(trades []*pb.Trade, expanded map[int]bool, cursor int) int {
+	row := 0
+	for i, tr := range trades {
+		if row == cursor {
+			return i
+		}
+		row++
+		if expanded[i] {
+			row += 2 + len(tr.Transactions) // header + separator + transactions
+		}
+	}
+	return -1
+}
+
+func buildTradesTable(trades []*pb.Trade, expanded map[int]bool, w, h int) table.Model {
 	cols := []table.Column{
 		{Title: "Symbol", Width: 10},
-		{Title: "Executed", Width: 12},
-		{Title: "Notes", Width: 20},
+		{Title: "Instrument", Width: 20},
+		{Title: "Qty / Price", Width: 26},
 	}
 
-	rows := make([]table.Row, len(trades))
+	var rows []table.Row
 	for i, tr := range trades {
 		executedAt := "—"
 		if tr.ExecutedAt != nil {
 			executedAt = formatTS(tr.ExecutedAt.AsTime())
 		}
-		rows[i] = table.Row{
-			tr.UnderlyingSymbol,
-			executedAt,
-			tr.Notes,
+		rows = append(rows, table.Row{tr.UnderlyingSymbol, executedAt, tr.Notes})
+
+		if expanded[i] {
+			rows = append(rows, table.Row{"  Action", "Instrument", "Qty / Price"})
+			rows = append(rows, table.Row{
+				"  " + strings.Repeat("─", 8),
+				strings.Repeat("─", 18),
+				strings.Repeat("─", 24),
+			})
+			for _, tx := range tr.Transactions {
+				price := fmt.Sprintf("%s @ %s  fees %s",
+					tx.Quantity, formatCurrency(tx.FillPrice), formatCurrency(tx.Fees))
+				rows = append(rows, table.Row{
+					"  " + formatAction(tx.Action),
+					formatInstrument(tx.Instrument),
+					price,
+				})
+			}
 		}
 	}
 
@@ -179,7 +247,7 @@ func buildTradesTable(trades []*pb.Trade, w, h int) table.Model {
 		table.WithColumns(cols),
 		table.WithRows(rows),
 		table.WithFocused(true),
-		table.WithHeight(h-5), // 1 extra line for filter bar, 2 for tableStyle borders
+		table.WithHeight(h-5),
 	)
 	t.SetStyles(defaultTableStyles())
 	return t
