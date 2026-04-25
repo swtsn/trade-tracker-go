@@ -222,7 +222,7 @@ func positionIdxAtCursor(positions []*pb.Position, chains map[int]*pb.ChainDetai
 // showOpen controls whether to show cost_basis (open) or realized_pnl (closed).
 func buildPositionsTable(positions []*pb.Position, chains map[int]*pb.ChainDetail, loadingSet map[int]bool, w, h int, showOpen bool) table.Model {
 	cols := []table.Column{
-		{Title: "Symbol", Width: 14},
+		{Title: "Symbol", Width: 18},
 		{Title: "Strategy", Width: 10},
 		{Title: "Cost Basis", Width: pnlColumnWidth},
 		{Title: "Opened", Width: 12},

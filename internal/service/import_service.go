@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"trade-tracker-go/internal/domain"
 	"trade-tracker-go/internal/repository"
@@ -69,8 +70,9 @@ func NewImportService(
 // Steps:
 //  1. Dedup by BrokerTxID — skip already-imported transactions (single round-trip).
 //  2. Upsert instruments for all fresh transactions.
-//  3. Group fresh transactions by TradeID (set by the broker parser).
-//  4. Per group: classify strategy → create Trade → create Transactions
+//  3. Sort fresh transactions by ExecutedAt ascending (brokers may export newest-first).
+//  4. Group fresh transactions by TradeID (set by the broker parser).
+//  5. Per group: classify strategy → create Trade → create Transactions
 //     (closing legs first, then opening) → run hooks.
 //
 // Failures are per-trade-group. A failing group is recorded in ImportResult.Errors
@@ -116,7 +118,15 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 		}
 	}
 
-	// 3. Group transactions by TradeID, preserving first-seen order for deterministic processing.
+	// 3. Sort chronologically so trades are processed oldest-first.
+	// Brokers like Tastytrade export CSVs in reverse-chronological order; without this
+	// sort, closing trades would be processed before the opening trades that created the positions.
+	// Stable sort preserves relative order for same-timestamp legs (handled by closingFirst later).
+	sort.SliceStable(fresh, func(i, j int) bool {
+		return fresh[i].ExecutedAt.Before(fresh[j].ExecutedAt)
+	})
+
+	// 4. Group transactions by TradeID, preserving first-seen order for deterministic processing.
 	trades := make(map[string][]domain.Transaction)
 	var tradeOrder []string
 	for _, tx := range fresh {
@@ -126,7 +136,7 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 		trades[tx.TradeID] = append(trades[tx.TradeID], tx)
 	}
 
-	// 4. Process each trade.
+	// 5. Process each trade.
 	for _, tradeID := range tradeOrder {
 		if fatal := s.processTrade(ctx, tradeID, trades[tradeID], result); fatal != nil {
 			return nil, fatal
