@@ -200,7 +200,7 @@ func (v ImportView) View() string {
 			return strings.Join([]string{
 				importTitleStyle.Render("Import Failed"),
 				"",
-				errorViewStyle.Render(v.result.Err.Error()),
+				errorViewStyle.Width(v.width).Render(v.result.Err.Error()),
 				"",
 				importDimStyle.Render("Enter or Esc to return."),
 			}, "\n")

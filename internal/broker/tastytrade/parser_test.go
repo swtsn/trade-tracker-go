@@ -42,7 +42,8 @@ func TestParser_EquityOption_BTC(t *testing.T) {
 	assert.Equal(t, domain.PositionEffectClosing, tx.PositionEffect)
 	assert.Equal(t, "451551137", tx.BrokerOrderID)
 	assert.True(t, decimal.NewFromInt(2).Equal(tx.Quantity))
-	assert.True(t, decimal.NewFromFloat(62.00).Equal(tx.FillPrice))
+	// Average Price in Tastytrade CSV is per-contract (62.00); parser normalizes to per-share (0.62).
+	assert.True(t, decimal.NewFromFloat(0.62).Equal(tx.FillPrice))
 
 	// Fees: -(0.00 + -0.25) = 0.25
 	assert.True(t, decimal.NewFromFloat(0.25).Equal(tx.Fees))

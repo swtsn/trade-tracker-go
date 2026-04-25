@@ -147,6 +147,13 @@ func parseRow(
 		return domain.Transaction{}, fmt.Errorf("parse instrument %q: %w", symbol, err)
 	}
 
+	// Tastytrade's Average Price column is the per-contract dollar value (e.g. 246.00
+	// for a $2.46 option). Normalize to per-share so position_service multiplying by
+	// the multiplier produces the correct cash flow.
+	if instrument.Option != nil && !instrument.Option.Multiplier.IsZero() {
+		fillPrice = fillPrice.Div(instrument.Option.Multiplier)
+	}
+
 	// Group key: Order # when present; otherwise a per-row fallback so that
 	// expirations and dividend reinvestments each become their own trade.
 	groupKey := orderNum
