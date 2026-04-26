@@ -80,6 +80,7 @@ type Position struct {
 	UnderlyingSymbol string                 `protobuf:"bytes,4,opt,name=underlying_symbol,json=underlyingSymbol,proto3" json:"underlying_symbol,omitempty"`
 	StrategyType     StrategyType           `protobuf:"varint,5,opt,name=strategy_type,json=strategyType,proto3,enum=tradetracker.v1.StrategyType" json:"strategy_type,omitempty"`
 	// cost_basis is a decimal string; positive = net credit received; negative = net debit paid.
+	// Not meaningful for stock positions (strategy_type = STOCK).
 	CostBasis string `protobuf:"bytes,6,opt,name=cost_basis,json=costBasis,proto3" json:"cost_basis,omitempty"`
 	// realized_pnl is a decimal string; only set for closed positions.
 	RealizedPnl string                 `protobuf:"bytes,7,opt,name=realized_pnl,json=realizedPnl,proto3" json:"realized_pnl,omitempty"`
@@ -89,8 +90,12 @@ type Position struct {
 	// chain_attribution_gap mirrors chains.attribution_gap for this position's chain.
 	// True when the chain was started from a mixed trade with unattributed closing P&L.
 	ChainAttributionGap bool `protobuf:"varint,10,opt,name=chain_attribution_gap,json=chainAttributionGap,proto3" json:"chain_attribution_gap,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// net_quantity is the current share count; only set for stock positions.
+	NetQuantity string `protobuf:"bytes,11,opt,name=net_quantity,json=netQuantity,proto3" json:"net_quantity,omitempty"`
+	// avg_cost_per_share is the WAC cost per share including buy fees; only set for stock positions.
+	AvgCostPerShare string `protobuf:"bytes,12,opt,name=avg_cost_per_share,json=avgCostPerShare,proto3" json:"avg_cost_per_share,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Position) Reset() {
@@ -191,6 +196,20 @@ func (x *Position) GetChainAttributionGap() bool {
 		return x.ChainAttributionGap
 	}
 	return false
+}
+
+func (x *Position) GetNetQuantity() string {
+	if x != nil {
+		return x.NetQuantity
+	}
+	return ""
+}
+
+func (x *Position) GetAvgCostPerShare() string {
+	if x != nil {
+		return x.AvgCostPerShare
+	}
+	return ""
 }
 
 type ListPositionsRequest struct {
@@ -419,7 +438,7 @@ var File_tradetracker_v1_position_proto protoreflect.FileDescriptor
 
 const file_tradetracker_v1_position_proto_rawDesc = "" +
 	"\n" +
-	"\x1etradetracker/v1/position.proto\x12\x0ftradetracker.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btradetracker/v1/trade.proto\"\xad\x03\n" +
+	"\x1etradetracker/v1/position.proto\x12\x0ftradetracker.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1btradetracker/v1/trade.proto\"\xfd\x03\n" +
 	"\bPosition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -433,7 +452,9 @@ const file_tradetracker_v1_position_proto_rawDesc = "" +
 	"\topened_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bopenedAt\x127\n" +
 	"\tclosed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\bclosedAt\x122\n" +
 	"\x15chain_attribution_gap\x18\n" +
-	" \x01(\bR\x13chainAttributionGap\"\xaa\x01\n" +
+	" \x01(\bR\x13chainAttributionGap\x12!\n" +
+	"\fnet_quantity\x18\v \x01(\tR\vnetQuantity\x12+\n" +
+	"\x12avg_cost_per_share\x18\f \x01(\tR\x0favgCostPerShare\"\xaa\x01\n" +
 	"\x14ListPositionsRequest\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x127\n" +

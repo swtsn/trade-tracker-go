@@ -77,6 +77,9 @@ func runMigrations(db *sql.DB) error {
 		{13, "migrations/013_accounts_unique_broker_account_number.sql"},
 		{14, "migrations/014_trade_status_cleanup.sql"},
 		{15, "migrations/015_strategy_to_chains.sql"},
+		// Version 16 was a stock_positions migration that was reverted before merge;
+		// the slot is intentionally vacant to preserve the numbered sequence.
+		{17, "migrations/017_positions_stock_fields.sql"},
 	}
 
 	for _, m := range migrations {
