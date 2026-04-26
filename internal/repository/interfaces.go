@@ -117,6 +117,12 @@ type PositionRepository interface {
 	// CloseLot atomically records a lot_closings entry and updates the lot's remaining_quantity.
 	// Pass a non-nil closedAt when the lot is fully closed.
 	CloseLot(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, closedAt *time.Time) error
+	// CloseAndUpdatePosition atomically records a lot closing and updates the associated position's
+	// realized P&L in a single transaction, preventing divergence if the process crashes between
+	// the two writes. pos must be pre-resolved by the caller. pnlDelta is added to pos.RealizedPnL;
+	// if no open lots remain for pos.ChainID (or pos.OriginatingTradeID when ChainID is empty),
+	// pos.ClosedAt is stamped. pos is mutated in place.
+	CloseAndUpdatePosition(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, lotClosedAt *time.Time, pos *domain.Position, pnlDelta decimal.Decimal, updatedAt time.Time) error
 	// ListLotClosings retrieves all closing events for a lot, ordered by closed_at.
 	ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error)
 }

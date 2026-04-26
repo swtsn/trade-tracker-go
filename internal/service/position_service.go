@@ -232,28 +232,19 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 			RealizedPnL:    realizedPnL,
 			ClosedAt:       tx.ExecutedAt,
 		}
-		if err := s.positions.CloseLot(ctx, closing, newRemaining, lotClosedAt); err != nil {
-			return fmt.Errorf("close lot %s: %w", lot.ID, err)
+		pos, err := s.findPositionForLot(ctx, tx.AccountID, lot)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				s.logger.Warn("lot has no position row; realized_pnl not updated", "lot_id", lot.ID, "chain_id", lot.ChainID, "trade_id", lot.TradeID)
+				if err := s.positions.CloseLot(ctx, closing, newRemaining, lotClosedAt); err != nil {
+					return fmt.Errorf("close lot %s: %w", lot.ID, err)
+				}
+				continue
+			}
+			return fmt.Errorf("find position for lot %s: %w", lot.ID, err)
 		}
-
-		// TODO(tracked): CloseLot and accumulatePnL (UpdatePosition) must eventually run
-		// in the same DB transaction. The current gap is not a concurrency issue
-		// (MaxOpenConns=1 prevents concurrent writers), but a crash between the two
-		// calls leaves the lot permanently closed while positions.realized_pnl is never
-		// updated — silently wrong totals with no audit trail.
-		//
-		// To detect divergence, run:
-		//   SELECT lc.lot_id, SUM(lc.realized_pnl) AS lot_pnl,
-		//          p.realized_pnl AS pos_pnl
-		//   FROM lot_closings lc
-		//   JOIN position_lots pl ON pl.id = lc.lot_id
-		//   JOIN positions p ON p.chain_id = pl.chain_id
-		//   GROUP BY lc.lot_id, p.realized_pnl
-		//   HAVING ABS(lot_pnl - pos_pnl) > 0.001;
-		//
-		// Fix requires transaction-scoped repository operations (BeginTx on Repos).
-		if err := s.accumulatePnL(ctx, lot, tx.AccountID, realizedPnL, tx.ExecutedAt); err != nil {
-			return err
+		if err := s.positions.CloseAndUpdatePosition(ctx, closing, newRemaining, lotClosedAt, pos, realizedPnL, tx.ExecutedAt); err != nil {
+			return fmt.Errorf("close lot %s: %w", lot.ID, err)
 		}
 	}
 	if !remaining.IsZero() {
@@ -261,53 +252,6 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 			totalCloseQty, tx.Instrument.InstrumentID(), remaining)
 	}
 	return nil
-}
-
-// accumulatePnL adds realizedPnL to the position associated with the lot and
-// stamps position.closed_at if all lots under the position are now closed.
-// The position is located via lot.ChainID (if set) or lot.TradeID.
-func (s *PositionService) accumulatePnL(
-	ctx context.Context,
-	lot domain.PositionLot,
-	accountID string,
-	pnl decimal.Decimal,
-	updatedAt time.Time,
-) error {
-	pos, err := s.findPositionForLot(ctx, accountID, lot)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			// A lot exists but has no matching position row. This can happen for
-			// historical imports where position tracking was not yet active, but it
-			// also masks bugs (e.g. prior hook failure that skipped CreatePosition).
-			// Log so the discrepancy is detectable; realized_pnl will not be updated.
-			s.logger.Warn("lot has no position row; realized_pnl not updated", "lot_id", lot.ID, "chain_id", lot.ChainID, "trade_id", lot.TradeID)
-			return nil
-		}
-		return fmt.Errorf("find position for lot %s: %w", lot.ID, err)
-	}
-
-	pos.RealizedPnL = pos.RealizedPnL.Add(pnl)
-	pos.UpdatedAt = updatedAt
-
-	// Determine whether all lots under this position are now closed.
-	// For chained positions the check must span all trades in the chain; using
-	// the originating trade alone would prematurely close the position when the
-	// first trade's lots are exhausted while sibling trades still hold open lots.
-	var open []domain.PositionLot
-	if lot.ChainID != "" {
-		open, err = s.positions.ListOpenLotsByChain(ctx, accountID, lot.ChainID)
-	} else {
-		open, err = s.positions.ListOpenLotsByTrade(ctx, accountID, pos.OriginatingTradeID)
-	}
-	if err != nil {
-		return fmt.Errorf("list open lots for position: %w", err)
-	}
-	if len(open) == 0 {
-		t := updatedAt
-		pos.ClosedAt = &t
-	}
-
-	return s.positions.UpdatePosition(ctx, pos)
 }
 
 // findPositionForLot resolves the position for a lot using chain_id (if set) or trade_id.

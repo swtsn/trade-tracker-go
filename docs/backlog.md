@@ -1,39 +1,6 @@
 # Backlog
 Items explicitly deferred from current phases.
 
-## Prioritized Backlog
-
-### 1. Migrate strategy from trade to chain
-
-`strategy_type` currently lives on the `trade` row and propagates upward to chains and positions. This is the wrong home: a trade is a point-in-time event (one broker order), and its "strategy" is only meaningful if it's a pure opening trade. Closing trades, rolls, and assignments have no coherent strategy of their own — they are actions on an existing position. The chain is the right owner because it represents the full lifecycle of a position.
-
-Scope of this item (first pass only):
-
-- Remove `strategy_type` from the `trades` table and `Trade` domain struct. Remove `TradeRepo.UpdateStrategy` and the `strategy_service` upgrade step from the import pipeline.
-- Add `strategy_type` to the `chains` table and `Chain` domain struct.
-- Classify strategy once, when a chain is **created**, using the leg shapes of the opening trade that triggered chain creation. No re-classification on roll or close.
-- Update all read paths (positions, analytics, TUI) that currently source `strategy_type` from trade to source it from chain instead.
-- The existing `StrategyType` enum and `strategy.Classifier` are unchanged — only where classification is stored and when it is called changes.
-
-Out of scope for this pass: re-classification when the position shape changes (e.g. a lone short call later becoming a covered call as stock is acquired). That belongs in the unprioritized backlog item "Strategy re-derivation from live lot state."
-
-### 2. TUI navigation: positions → chain, trades → transactions
-
-Both relationships are tracked in the data model but are not yet surfaced in the TUI:
-- `Position.chain_id` exists and is populated — there is no UI path to view a position's chain or the other positions within it.
-- `Trade.transactions` is populated in `ListTrades` / `GetTrade` responses — there is no UI path to drill into the legs of a trade.
-
-Items:
-- **Positions → chain detail**: from the positions view, pressing Enter (or similar) on a row should open a chain detail view showing all positions in the chain, the chain's P&L, and the chain's timeline.
-- **Trades → transaction legs**: from the trades view, pressing Enter on a row should expand or navigate to a leg view listing each transaction (symbol, action, quantity, fill price, fees, executed_at).
-- Neither requires new API endpoints. `GetChain(account_id, chain_id)` already exists and returns full chain detail including all events and legs. `Trade.transactions` is already embedded in `ListTrades` / `GetTrade` responses. The work is purely in TUI view construction and navigation wiring.
-
-### 3. TUI polish
-
-Make the TUI prettier. Colors, layout, spacing, and table styles are functional but minimal.
-
----
-
 ## Unprioritized Backlog
 
 ### Data Model
