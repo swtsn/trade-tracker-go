@@ -111,7 +111,7 @@ func TestListPositions_OpenFilter(t *testing.T) {
 	require.Len(t, resp.Positions, 1)
 	assert.Equal(t, "open1", resp.Positions[0].Id)
 	assert.Nil(t, resp.Positions[0].ClosedAt)
-	assert.Empty(t, resp.Positions[0].RealizedPnl) // open: no realized P&L
+	assert.Equal(t, "0", resp.Positions[0].RealizedPnl) // open position has zero realized P&L
 }
 
 func TestListPositions_ClosedFilter(t *testing.T) {

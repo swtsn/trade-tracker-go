@@ -372,6 +372,196 @@ func TestPositionService_EquityCreatesStockPosition(t *testing.T) {
 	assert.True(t, expectedAvg.Equal(pos.AvgCostPerShare), "avg_cost_per_share: %s", pos.AvgCostPerShare)
 }
 
+// TestPositionService_EquityWACMultipleBuys: buying at different prices accumulates WAC correctly.
+func TestPositionService_EquityWACMultipleBuys(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("AAPL")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+
+	// First buy: 10 shares at $100, no fees.
+	tradeID1 := uuid.New().String()
+	buy1 := makeTransaction(tradeID1, "wb1-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
+	buy1.FillPrice = decimal.NewFromFloat(100)
+	buy1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, buy1)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{buy1}, chainID, domain.StrategyStock))
+
+	// Second buy: 10 shares at $120, no fees. New WAC = (10×100 + 10×120) / 20 = 110.
+	tradeID2 := uuid.New().String()
+	buy2 := makeTransaction(tradeID2, "wb1-002", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t2)
+	buy2.FillPrice = decimal.NewFromFloat(120)
+	buy2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, buy2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{buy2}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.NewFromFloat(20).Equal(pos.NetQuantity), "qty: %s", pos.NetQuantity)
+	assert.True(t, decimal.NewFromFloat(110).Equal(pos.AvgCostPerShare), "wac: %s", pos.AvgCostPerShare)
+}
+
+// TestPositionService_EquityPartialSellThenRebuy: partial sell updates position; rebuy updates WAC.
+func TestPositionService_EquityPartialSellThenRebuy(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("AAPL")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+
+	// Buy 10 shares at $100.
+	tradeID1 := uuid.New().String()
+	buy1 := makeTransaction(tradeID1, "psr-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
+	buy1.FillPrice = decimal.NewFromFloat(100)
+	buy1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, buy1)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{buy1}, chainID, domain.StrategyStock))
+
+	// Sell 5 shares at $110: realized = 5×110 − 5×100 = +50.
+	tradeID2 := uuid.New().String()
+	sell1 := makeTransaction(tradeID2, "psr-002", acc.ID, acc.Broker, inst, domain.ActionSell, domain.PositionEffectClosing, 5, t2)
+	sell1.FillPrice = decimal.NewFromFloat(110)
+	sell1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, sell1)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{sell1}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.NewFromFloat(5).Equal(pos.NetQuantity), "qty after partial sell: %s", pos.NetQuantity)
+	assert.True(t, decimal.NewFromFloat(50).Equal(pos.RealizedPnL), "realized after partial sell: %s", pos.RealizedPnL)
+	assert.Nil(t, pos.ClosedAt, "position still open after partial sell")
+
+	// Buy 5 more shares at $90. New WAC = (5×100 + 5×90) / 10 = 95.
+	tradeID3 := uuid.New().String()
+	buy2 := makeTransaction(tradeID3, "psr-003", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 5, t3)
+	buy2.FillPrice = decimal.NewFromFloat(90)
+	buy2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID3, t3, buy2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID3, []domain.Transaction{buy2}, chainID, domain.StrategyStock))
+
+	pos, err = repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.NewFromFloat(10).Equal(pos.NetQuantity), "qty after rebuy: %s", pos.NetQuantity)
+	assert.True(t, decimal.NewFromFloat(95).Equal(pos.AvgCostPerShare), "wac after rebuy: %s", pos.AvgCostPerShare)
+}
+
+// TestPositionService_EquityMultiCyclePnL: sell-all → re-buy → sell-all accumulates both cycles' P&L.
+func TestPositionService_EquityMultiCyclePnL(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("AAPL")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+	t4 := time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)
+
+	// Cycle 1: buy 10 @ $100, sell all @ $110. Realized = 10×(110−100) = +100.
+	tradeID1 := uuid.New().String()
+	buy1 := makeTransaction(tradeID1, "mc-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
+	buy1.FillPrice = decimal.NewFromFloat(100)
+	buy1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, buy1)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{buy1}, chainID, domain.StrategyStock))
+
+	tradeID2 := uuid.New().String()
+	sell1 := makeTransaction(tradeID2, "mc-002", acc.ID, acc.Broker, inst, domain.ActionSell, domain.PositionEffectClosing, 10, t2)
+	sell1.FillPrice = decimal.NewFromFloat(110)
+	sell1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, sell1)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{sell1}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.NotNil(t, pos.ClosedAt, "position should be closed after sell-all")
+	assert.True(t, decimal.NewFromFloat(100).Equal(pos.RealizedPnL), "cycle 1 pnl: %s", pos.RealizedPnL)
+
+	// Cycle 2: re-buy 5 @ $90, sell all @ $95. Realized = 5×(95−90) = +25. Cumulative = +125.
+	tradeID3 := uuid.New().String()
+	buy2 := makeTransaction(tradeID3, "mc-003", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 5, t3)
+	buy2.FillPrice = decimal.NewFromFloat(90)
+	buy2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID3, t3, buy2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID3, []domain.Transaction{buy2}, chainID, domain.StrategyStock))
+
+	tradeID4 := uuid.New().String()
+	sell2 := makeTransaction(tradeID4, "mc-004", acc.ID, acc.Broker, inst, domain.ActionSell, domain.PositionEffectClosing, 5, t4)
+	sell2.FillPrice = decimal.NewFromFloat(95)
+	sell2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID4, t4, sell2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID4, []domain.Transaction{sell2}, chainID, domain.StrategyStock))
+
+	pos, err = repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.NotNil(t, pos.ClosedAt, "position should be closed after second sell-all")
+	assert.True(t, decimal.NewFromFloat(125).Equal(pos.RealizedPnL), "cumulative pnl: %s", pos.RealizedPnL)
+}
+
+// TestPositionService_EquitySellExceedsHeld: selling more than held returns an error.
+func TestPositionService_EquitySellExceedsHeld(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("AAPL")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+
+	tradeID1 := uuid.New().String()
+	buy := makeTransaction(tradeID1, "seh-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 5, t1)
+	buy.FillPrice = decimal.NewFromFloat(100)
+	buy.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, buy)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{buy}, chainID, domain.StrategyStock))
+
+	tradeID2 := uuid.New().String()
+	sell := makeTransaction(tradeID2, "seh-002", acc.ID, acc.Broker, inst, domain.ActionSell, domain.PositionEffectClosing, 10, t2)
+	sell.FillPrice = decimal.NewFromFloat(110)
+	sell.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, sell)
+	err := svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{sell}, chainID, domain.StrategyStock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only 5 held")
+}
+
+// TestPositionService_EquityZeroQuantityReturnsError: a buy with zero quantity returns an error
+// rather than panicking on division-by-zero in the WAC formula.
+func TestPositionService_EquityZeroQuantityReturnsError(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("AAPL")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+
+	tradeID := uuid.New().String()
+	buy := makeTransaction(tradeID, "zq-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 0, t1)
+	buy.FillPrice = decimal.NewFromFloat(100)
+	buy.Fees = decimal.Zero
+	buy.Quantity = decimal.Zero // explicitly zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID, t1, buy)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID, domain.StrategyStock)
+	err := svc.ProcessTrade(ctx, tradeID, []domain.Transaction{buy}, chainID, domain.StrategyStock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "zero quantity")
+}
+
 // TestPositionService_RollDoesNotClosePosition: a mixed trade (roll) should close the
 // old lot but not the position, since new lots are added in the same trade.
 func TestPositionService_RollDoesNotClosePosition(t *testing.T) {

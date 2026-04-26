@@ -91,7 +91,7 @@ func formatTS(ts time.Time) string {
 // strategyLabels maps proto enum name strings to short display labels.
 var strategyLabels = map[string]string{
 	"STRATEGY_TYPE_UNSPECIFIED":            "—",
-	"STRATEGY_TYPE_UNKNOWN":                "?",
+	"STRATEGY_TYPE_UNKNOWN":                "Custom",
 	"STRATEGY_TYPE_IRON_BUTTERFLY":         "IBfly",
 	"STRATEGY_TYPE_IRON_CONDOR":            "IC",
 	"STRATEGY_TYPE_BROKEN_HEART_BUTTERFLY": "BHBfly",

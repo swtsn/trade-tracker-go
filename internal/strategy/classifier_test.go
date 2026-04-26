@@ -113,6 +113,19 @@ func TestClassifier(t *testing.T) {
 			expect: domain.StrategyIronCondor,
 		},
 		{
+			// Asymmetric widths (e.g. MSFT 370/380P + 425/440C): call spread has
+			// long strike below short strike, so shortCall > longCall in strike order.
+			// Valid iron condor as long as all put strikes < all call strikes.
+			name: "IronCondor — asymmetric widths (long call below short call)",
+			legs: []LegShape{
+				put(decimal.NewFromInt(370), exp1, q1),
+				put(decimal.NewFromInt(380), exp1, q1.Neg()),
+				call(decimal.NewFromInt(425), exp1, q1),
+				call(decimal.NewFromInt(440), exp1, q1.Neg()),
+			},
+			expect: domain.StrategyIronCondor,
+		},
+		{
 			name: "IronCondor — mixed expiries → Unknown",
 			legs: []LegShape{
 				put(s90, exp1, q1),
@@ -812,4 +825,54 @@ func TestFromTransactions_ActionBuyAndSell(t *testing.T) {
 	assert.Equal(t, domain.AssetClassEquity, legs[0].AssetClass)
 	assert.True(t, legs[1].Quantity.IsNegative())
 	assert.Equal(t, domain.AssetClassFuture, legs[1].AssetClass)
+}
+
+func TestFromTransactions_MultiFillAggregation(t *testing.T) {
+	// 2-lot iron condor: broker reports each lot as a separate row, so 8 transactions
+	// for what is logically 4 legs at qty 2. FromTransactions must collapse them.
+	exp := time.Date(2026, 2, 20, 0, 0, 0, 0, time.UTC)
+	opt := func(sym string, ot domain.OptionType, strike decimal.Decimal) domain.Instrument {
+		return domain.Instrument{
+			Symbol:     sym,
+			AssetClass: domain.AssetClassEquityOption,
+			Option: &domain.OptionDetails{
+				OptionType: ot,
+				Strike:     strike,
+				Expiration: exp,
+			},
+		}
+	}
+	mkTx := func(action domain.Action, inst domain.Instrument) domain.Transaction {
+		return domain.Transaction{
+			Action:         action,
+			PositionEffect: domain.PositionEffectOpening,
+			Quantity:       q1,
+			Instrument:     inst,
+		}
+	}
+
+	put75 := opt("ZM", domain.OptionTypePut, decimal.NewFromInt(75))
+	put80 := opt("ZM", domain.OptionTypePut, decimal.NewFromInt(80))
+	call95 := opt("ZM", domain.OptionTypeCall, decimal.NewFromInt(95))
+	call100 := opt("ZM", domain.OptionTypeCall, decimal.NewFromInt(100))
+
+	txs := []domain.Transaction{
+		mkTx(domain.ActionSTO, call95),
+		mkTx(domain.ActionSTO, put80),
+		mkTx(domain.ActionBTO, call100),
+		mkTx(domain.ActionBTO, put75),
+		mkTx(domain.ActionSTO, call95),
+		mkTx(domain.ActionSTO, put80),
+		mkTx(domain.ActionBTO, call100),
+		mkTx(domain.ActionBTO, put75),
+	}
+
+	legs := FromTransactions(txs)
+	assert.Len(t, legs, 4, "8 fills across 4 instruments should collapse to 4 legs")
+	for _, l := range legs {
+		assert.Equal(t, q2, l.Quantity.Abs(), "each leg should have qty 2")
+	}
+
+	c := NewClassifier()
+	assert.Equal(t, domain.StrategyIronCondor, c.Classify(legs))
 }
