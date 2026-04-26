@@ -311,6 +311,83 @@ func (r *positionRepo) CloseLot(ctx context.Context, closing *domain.LotClosing,
 	return tx.Commit()
 }
 
+// CloseAndUpdatePosition atomically records a lot closing and updates the associated position.
+func (r *positionRepo) CloseAndUpdatePosition(ctx context.Context, closing *domain.LotClosing, remaining decimal.Decimal, lotClosedAt *time.Time, pos *domain.Position, pnlDelta decimal.Decimal, updatedAt time.Time) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("close and update position: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Insert lot_closings row.
+	s := model.LotClosingToStorage(*closing)
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO lot_closings
+			(id, lot_id, closing_tx_id, closed_quantity, close_price, close_fees,
+			 realized_pnl, closed_at, resulting_lot_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.LotID, s.ClosingTxID, s.ClosedQuantity, s.ClosePrice, s.CloseFees,
+		s.RealizedPnL, s.ClosedAt, s.ResultingLotID,
+	)
+	if err != nil {
+		return fmt.Errorf("close and update position: insert closing: %w", err)
+	}
+
+	// Update the lot's remaining quantity.
+	var closedAtStr sql.NullString
+	if lotClosedAt != nil {
+		closedAtStr = sql.NullString{String: lotClosedAt.UTC().Format(time.RFC3339), Valid: true}
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE position_lots SET remaining_quantity = ?, closed_at = ? WHERE id = ?`,
+		remaining.String(), closedAtStr, closing.LotID,
+	)
+	if err != nil {
+		return fmt.Errorf("close and update position: update lot: %w", err)
+	}
+	if err := requireOneRow(res, "lot", closing.LotID); err != nil {
+		return err
+	}
+
+	// Check whether any open lots remain for this position (within the same transaction,
+	// so the lot we just closed is already reflected).
+	pos.RealizedPnL = pos.RealizedPnL.Add(pnlDelta)
+	pos.UpdatedAt = updatedAt
+	var openCount int
+	if pos.ChainID != "" {
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM position_lots WHERE chain_id = ? AND closed_at IS NULL`,
+			pos.ChainID,
+		).Scan(&openCount)
+	} else {
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM position_lots WHERE trade_id = ? AND closed_at IS NULL`,
+			pos.OriginatingTradeID,
+		).Scan(&openCount)
+	}
+	if err != nil {
+		return fmt.Errorf("close and update position: count open lots: %w", err)
+	}
+	if openCount == 0 {
+		pos.ClosedAt = &updatedAt
+	}
+
+	// Update the position.
+	p := model.PositionToStorage(*pos)
+	res, err = tx.ExecContext(ctx,
+		`UPDATE positions SET realized_pnl = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
+		p.RealizedPnL, p.UpdatedAt, p.ClosedAt, p.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("close and update position: update position: %w", err)
+	}
+	if err := requireOneRow(res, "position", pos.ID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // ListLotClosings retrieves all closing events for a lot, ordered by closed_at.
 func (r *positionRepo) ListLotClosings(ctx context.Context, lotID string) ([]domain.LotClosing, error) {
 	rows, err := r.db.QueryContext(ctx,
