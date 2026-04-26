@@ -28,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PositionServiceClient interface {
 	// ListPositions returns positions for an account ordered by opened_at.
+	// Includes both options/futures positions and stock positions (strategy_type = STOCK).
 	ListPositions(ctx context.Context, in *ListPositionsRequest, opts ...grpc.CallOption) (*ListPositionsResponse, error)
 	// GetPosition returns a single position by ID.
 	GetPosition(ctx context.Context, in *GetPositionRequest, opts ...grpc.CallOption) (*GetPositionResponse, error)
@@ -66,6 +67,7 @@ func (c *positionServiceClient) GetPosition(ctx context.Context, in *GetPosition
 // for forward compatibility.
 type PositionServiceServer interface {
 	// ListPositions returns positions for an account ordered by opened_at.
+	// Includes both options/futures positions and stock positions (strategy_type = STOCK).
 	ListPositions(context.Context, *ListPositionsRequest) (*ListPositionsResponse, error)
 	// GetPosition returns a single position by ID.
 	GetPosition(context.Context, *GetPositionRequest) (*GetPositionResponse, error)

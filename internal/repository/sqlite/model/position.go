@@ -9,8 +9,8 @@ import (
 	"trade-tracker-go/internal/domain"
 )
 
-// Position holds the flat, SQL-scannable fields for a positions row (migration 009 schema)
-// plus chain_attribution_gap joined from chains.
+// Position holds the flat, SQL-scannable fields for a positions row plus
+// chain_attribution_gap joined from chains.
 type Position struct {
 	ID                  string
 	AccountID           string
@@ -20,6 +20,8 @@ type Position struct {
 	StrategyType        string
 	CostBasis           string
 	RealizedPnL         string
+	NetQuantity         string
+	AvgCostPerShare     string
 	OpenedAt            string
 	UpdatedAt           string
 	ClosedAt            sql.NullString
@@ -28,12 +30,12 @@ type Position struct {
 
 // ScanDest returns pointers matching the SELECT column order:
 // id, account_id, chain_id, originating_trade_id, underlying_symbol,
-// strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at,
-// chain_attribution_gap
+// strategy_type, cost_basis, realized_pnl, net_quantity, avg_cost_per_share,
+// opened_at, updated_at, closed_at, chain_attribution_gap
 func (r *Position) ScanDest() []any {
 	return []any{
 		&r.ID, &r.AccountID, &r.ChainID, &r.OriginatingTradeID, &r.UnderlyingSymbol,
-		&r.StrategyType, &r.CostBasis, &r.RealizedPnL,
+		&r.StrategyType, &r.CostBasis, &r.RealizedPnL, &r.NetQuantity, &r.AvgCostPerShare,
 		&r.OpenedAt, &r.UpdatedAt, &r.ClosedAt,
 		&r.ChainAttributionGap,
 	}
@@ -49,6 +51,14 @@ func (r Position) ToDomain() (domain.Position, error) {
 	if err != nil {
 		return domain.Position{}, fmt.Errorf("position realized_pnl: %w", err)
 	}
+	netQty, err := decimal.NewFromString(r.NetQuantity)
+	if err != nil {
+		return domain.Position{}, fmt.Errorf("position net_quantity: %w", err)
+	}
+	avgCost, err := decimal.NewFromString(r.AvgCostPerShare)
+	if err != nil {
+		return domain.Position{}, fmt.Errorf("position avg_cost_per_share: %w", err)
+	}
 	openedAt, err := time.Parse(time.RFC3339, r.OpenedAt)
 	if err != nil {
 		return domain.Position{}, fmt.Errorf("position opened_at: %w", err)
@@ -61,12 +71,14 @@ func (r Position) ToDomain() (domain.Position, error) {
 	p := domain.Position{
 		ID:                  r.ID,
 		AccountID:           r.AccountID,
-		ChainID:             r.ChainID.String, // empty string for legacy rows with NULL chain_id
+		ChainID:             r.ChainID.String,
 		OriginatingTradeID:  r.OriginatingTradeID,
 		UnderlyingSymbol:    r.UnderlyingSymbol,
 		StrategyType:        domain.StrategyType(r.StrategyType),
 		CostBasis:           costBasis,
 		RealizedPnL:         realizedPnL,
+		NetQuantity:         netQty,
+		AvgCostPerShare:     avgCost,
 		OpenedAt:            openedAt,
 		UpdatedAt:           updatedAt,
 		ChainAttributionGap: r.ChainAttributionGap != 0,
@@ -96,6 +108,8 @@ func PositionToStorage(pos domain.Position) Position {
 		StrategyType:       strategyType,
 		CostBasis:          pos.CostBasis.String(),
 		RealizedPnL:        pos.RealizedPnL.String(),
+		NetQuantity:        pos.NetQuantity.String(),
+		AvgCostPerShare:    pos.AvgCostPerShare.String(),
 		OpenedAt:           pos.OpenedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:          pos.UpdatedAt.UTC().Format(time.RFC3339),
 	}

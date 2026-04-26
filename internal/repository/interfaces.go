@@ -149,6 +149,11 @@ type ChainRepository interface {
 	ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error)
 	UpdateChainClosed(ctx context.Context, id string, closedAt time.Time) error
 
+	// GetStockChainBySymbol returns the durable stock chain for (accountID, symbol).
+	// Stock chains are keyed by (account, symbol) and never closed at the chain level.
+	// Returns domain.ErrNotFound when no stock chain exists for the symbol yet.
+	GetStockChainBySymbol(ctx context.Context, accountID, symbol string) (*domain.Chain, error)
+
 	// GetOpenChainForInstrument returns the open chain in the account that has a net
 	// positive opening balance for the given instrument (derived from transaction arithmetic).
 	// Used to attribute a closing transaction to its originating chain.

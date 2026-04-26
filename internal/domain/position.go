@@ -9,14 +9,18 @@ import (
 // Position represents one open or closed position in an account.
 // A position always belongs to a chain; ChainID is set at creation time.
 // Written by PositionService.ProcessTrade; never written independently.
+// For StrategyStock positions, NetQuantity and AvgCostPerShare track WAC state;
+// those fields are zero for all other strategy types.
 type Position struct {
 	ID                 string
 	AccountID          string
 	ChainID            string
 	OriginatingTradeID string
 	UnderlyingSymbol   string
-	CostBasis          decimal.Decimal // positive = net credit received; negative = net debit paid
+	CostBasis          decimal.Decimal // positive = net credit received; negative = net debit paid (options/futures only)
 	RealizedPnL        decimal.Decimal
+	NetQuantity        decimal.Decimal // net shares held; only meaningful for StrategyStock
+	AvgCostPerShare    decimal.Decimal // WAC including buy fees; only meaningful for StrategyStock
 	OpenedAt           time.Time
 	UpdatedAt          time.Time
 	ClosedAt           *time.Time

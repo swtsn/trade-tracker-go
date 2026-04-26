@@ -108,6 +108,28 @@ func (r *chainRepo) GetChainByTradeID(ctx context.Context, tradeID string) (*dom
 	return &chain, nil
 }
 
+// GetStockChainBySymbol returns the durable stock chain for (accountID, symbol).
+// Returns domain.ErrNotFound if no stock chain exists for that symbol yet.
+func (r *chainRepo) GetStockChainBySymbol(ctx context.Context, accountID, symbol string) (*domain.Chain, error) {
+	var s model.Chain
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, account_id, underlying_symbol, original_trade_id, created_at, closed_at, strategy_type, attribution_gap
+		 FROM chains WHERE account_id = ? AND underlying_symbol = ? AND strategy_type = ? LIMIT 1`,
+		accountID, symbol, string(domain.StrategyStock),
+	).Scan(&s.ID, &s.AccountID, &s.UnderlyingSymbol, &s.OriginalTradeID, &s.CreatedAt, &s.ClosedAt, &s.StrategyType, &s.AttributionGap)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get stock chain by symbol: %w", err)
+	}
+	chain, err := s.ToDomain()
+	if err != nil {
+		return nil, err
+	}
+	return &chain, nil
+}
+
 // ListChainsByAccount retrieves chains for an account with optional filtering for open chains.
 // Links are not loaded; use GetChainByID for full chain detail.
 func (r *chainRepo) ListChainsByAccount(ctx context.Context, accountID string, openOnly bool) ([]domain.Chain, error) {

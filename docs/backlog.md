@@ -53,7 +53,13 @@ concerned with positions and P&L only.
 
 ### TUI
 
+- **Options position quantity** — the positions table shows a blank Qty for options rows. The net open quantity (sum of signed lot quantities across all open lots in the chain) should be computed and displayed, similar to how stock positions show net shares. The natural extension point is `buildPositionsTable` in `internal/tui/views/positions.go`; the quantity could be derived from the open lots already available via chain detail, or added as a field on the `Position` proto.
+
+- **Positions sort order** — the positions table is currently sorted by symbol ascending with "/" (futures) first. Support for alternative sort orders (e.g. by opened date, by P&L, by strategy) would be useful. Design should allow a persistent per-user default and an in-session toggle, similar to how most terminal UIs handle column sorting (e.g. a keypress cycles through sort fields). The `posDisplayOrder` helper in `internal/tui/views/positions.go` is the right extension point.
+
 - **Server-side error surfacing** — the TUI has no structured way to surface server-side warnings or non-fatal errors to the user. The server logs these (e.g. skipped transactions, missing position rows) but the TUI client only receives gRPC status codes. A clean solution would propagate actionable server warnings through the RPC response (e.g. a repeated `warnings` field on affected responses) so the TUI can display them inline rather than silently dropping them.
+
+- **Assess ChainService logging** — review what ChainService logs, at what levels, and whether the messages are useful in production vs. noisy. The `findOrCreateStockChain` path and the mixed-trade attribution-gap warning are specific candidates to evaluate.
 
 ### Admin / Operations
 
@@ -76,6 +82,8 @@ concerned with positions and P&L only.
 - **Analytics data access layer** — `AnalyticsService` currently holds a raw `*sql.DB` and issues queries inline, bypassing the repository abstraction used everywhere else. As query complexity grows this will become hard to test and maintain in isolation. Refactor to a dedicated `AnalyticsRepository` interface (or a set of read-model query methods on existing repositories) so that the service layer stays free of SQL and the queries can be tested or swapped independently.
 
 - **Data migration runner** — as bugs are fixed and new contract multipliers are added (futures, futures options), it will become untenable to start from scratch each import. A migration runner would allow reprocessing existing data in-place — re-running parsing, lot matching, or chain detection steps against already-imported transactions without requiring a full re-import. Design should account for partial reruns (e.g. re-derive multipliers only) and idempotency.
+
+  - **Stock position backfill** is the first concrete case. The `stock_positions` table was introduced after existing equity transactions were already imported, so those transactions have no corresponding `stock_positions` rows. Re-importing the same CSV files is a no-op (deduplication by `BrokerTxID` skips already-known transactions). What is needed is a `StockPositionService.DetectStockPositions(ctx, accountID)` method — the analog of `ChainService.DetectChains` — that reads all existing equity transactions from the DB, sorts them chronologically, and replays them through the WAC logic to build the `stock_positions` rows. The method should clear and rebuild from scratch for idempotency. It would be triggered via the same Admin API entry point described above.
 
 - **PostgreSQL migration** — SQLite is the initial storage layer. If analytics performance becomes a concern at scale, PostgreSQL is the upgrade path.
 - **Multi-user support** — currently designed as a personal single-user tool.

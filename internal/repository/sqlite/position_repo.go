@@ -15,7 +15,8 @@ import (
 
 const positionSelect = `
 	SELECT p.id, p.account_id, p.chain_id, p.originating_trade_id, p.underlying_symbol,
-	       p.strategy_type, p.cost_basis, p.realized_pnl, p.opened_at, p.updated_at, p.closed_at,
+	       p.strategy_type, p.cost_basis, p.realized_pnl, p.net_quantity, p.avg_cost_per_share,
+	       p.opened_at, p.updated_at, p.closed_at,
 	       COALESCE(c.attribution_gap, 0) AS chain_attribution_gap
 	FROM positions p
 	LEFT JOIN chains c ON c.id = p.chain_id`
@@ -46,10 +47,12 @@ func (r *positionRepo) CreatePosition(ctx context.Context, pos *domain.Position)
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO positions
 			(id, account_id, chain_id, originating_trade_id, underlying_symbol,
-			 strategy_type, cost_basis, realized_pnl, opened_at, updated_at, closed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 strategy_type, cost_basis, realized_pnl, net_quantity, avg_cost_per_share,
+			 opened_at, updated_at, closed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.AccountID, s.ChainID, s.OriginatingTradeID, s.UnderlyingSymbol,
-		s.StrategyType, s.CostBasis, s.RealizedPnL, s.OpenedAt, s.UpdatedAt, s.ClosedAt,
+		s.StrategyType, s.CostBasis, s.RealizedPnL, s.NetQuantity, s.AvgCostPerShare,
+		s.OpenedAt, s.UpdatedAt, s.ClosedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create position: %w", err)
@@ -57,18 +60,22 @@ func (r *positionRepo) CreatePosition(ctx context.Context, pos *domain.Position)
 	return nil
 }
 
-// UpdatePosition updates mutable fields: cost_basis, realized_pnl, strategy_type, updated_at, closed_at.
+// UpdatePosition updates mutable fields: cost_basis, realized_pnl, strategy_type,
+// net_quantity, avg_cost_per_share, updated_at, closed_at.
 func (r *positionRepo) UpdatePosition(ctx context.Context, pos *domain.Position) error {
 	s := model.PositionToStorage(*pos)
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE positions SET
-			cost_basis    = ?,
-			realized_pnl  = ?,
-			strategy_type = ?,
-			updated_at    = ?,
-			closed_at     = ?
+			cost_basis         = ?,
+			realized_pnl       = ?,
+			strategy_type      = ?,
+			net_quantity       = ?,
+			avg_cost_per_share = ?,
+			updated_at         = ?,
+			closed_at          = ?
 		 WHERE id = ?`,
-		s.CostBasis, s.RealizedPnL, s.StrategyType, s.UpdatedAt, s.ClosedAt, s.ID,
+		s.CostBasis, s.RealizedPnL, s.StrategyType, s.NetQuantity, s.AvgCostPerShare,
+		s.UpdatedAt, s.ClosedAt, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update position: %w", err)

@@ -74,6 +74,8 @@ func positionToProto(pos *domain.Position) *pb.Position {
 		UnderlyingSymbol:    pos.UnderlyingSymbol,
 		StrategyType:        strategyTypeToProto(pos.StrategyType),
 		CostBasis:           pos.CostBasis.String(),
+		NetQuantity:         pos.NetQuantity.String(),
+		AvgCostPerShare:     pos.AvgCostPerShare.String(),
 		OpenedAt:            timestamppb.New(pos.OpenedAt),
 		ChainAttributionGap: pos.ChainAttributionGap,
 	}

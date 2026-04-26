@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
+
+	"trade-tracker-go/internal/domain"
+	"trade-tracker-go/internal/repository"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
-	"trade-tracker-go/internal/domain"
-	"trade-tracker-go/internal/repository"
 )
 
 // ErrNoOpenLots is returned by processClosing when a closing transaction finds no
@@ -51,6 +53,9 @@ func (s *PositionService) ListPositions(ctx context.Context, accountID string, o
 // Closing legs FIFO-match against open lots, compute realized P&L, and stamp
 // position.closed_at when all lots under the position are fully closed.
 func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string, strategyType domain.StrategyType) error {
+	if allEquity(txns) {
+		return s.processEquityTrade(ctx, tradeID, txns, chainID)
+	}
 	for _, tx := range txns {
 		if tx.TradeID != tradeID {
 			return fmt.Errorf("position service: transaction %s has trade_id %q, expected %q", tx.ID, tx.TradeID, tradeID)
@@ -152,7 +157,7 @@ func (s *PositionService) processClosing(ctx context.Context, tx domain.Transact
 		return fmt.Errorf("list open lots: %w", err)
 	}
 	if len(lots) == 0 {
-		return fmt.Errorf("%w: instrument %s account %s", ErrNoOpenLots, tx.Instrument.InstrumentID(), tx.AccountID)
+		return fmt.Errorf("%w: instrument %s account %s", ErrNoOpenLots, tx.Instrument, tx.AccountID)
 	}
 
 	multiplier := optionMultiplier(tx.Instrument)
@@ -291,4 +296,121 @@ func optionMultiplier(inst domain.Instrument) decimal.Decimal {
 		return inst.Option.Multiplier
 	}
 	return decimal.NewFromInt(1)
+}
+
+// processEquityTrade processes all equity transactions for a stock position using WAC.
+// Transactions are sorted chronologically before processing.
+func (s *PositionService) processEquityTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+	sorted := make([]domain.Transaction, len(txns))
+	copy(sorted, txns)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].ExecutedAt.Before(sorted[j].ExecutedAt)
+	})
+	for _, tx := range sorted {
+		switch tx.Action {
+		case domain.ActionBTO, domain.ActionBuy:
+			if err := s.equityBuy(ctx, tradeID, chainID, tx); err != nil {
+				return fmt.Errorf("equity buy tx %s: %w", tx.ID, err)
+			}
+		case domain.ActionSTC, domain.ActionSell:
+			if err := s.equitySell(ctx, chainID, tx); err != nil {
+				return fmt.Errorf("equity sell tx %s: %w", tx.ID, err)
+			}
+		default:
+			s.logger.Warn("position service: unhandled equity action; skipping",
+				"action", tx.Action, "tx_id", tx.ID)
+		}
+	}
+	return nil
+}
+
+// equityBuy creates or updates the stock position for a buy using WAC.
+//
+//	new_avg = (held_qty × old_avg + buy_qty × price + fees) / new_total_qty
+func (s *PositionService) equityBuy(ctx context.Context, tradeID, chainID string, tx domain.Transaction) error {
+	qty := tx.Quantity.Abs()
+	avgCost := tx.FillPrice.Mul(qty).Add(tx.Fees).Div(qty)
+
+	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
+	if errors.Is(err, domain.ErrNotFound) {
+		posID, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate position id: %w", err)
+		}
+		return s.positions.CreatePosition(ctx, &domain.Position{
+			ID:                 posID.String(),
+			AccountID:          tx.AccountID,
+			ChainID:            chainID,
+			OriginatingTradeID: tradeID,
+			UnderlyingSymbol:   tx.Instrument.Symbol,
+			NetQuantity:        qty,
+			AvgCostPerShare:    avgCost,
+			OpenedAt:           tx.ExecutedAt,
+			UpdatedAt:          tx.ExecutedAt,
+			StrategyType:       domain.StrategyStock,
+		})
+	}
+	if err != nil {
+		return fmt.Errorf("get position: %w", err)
+	}
+
+	if existing.ClosedAt != nil {
+		// Re-opening: reset open fields, retain realized P&L.
+		existing.NetQuantity = qty
+		existing.AvgCostPerShare = avgCost
+		existing.ClosedAt = nil
+		existing.OpenedAt = tx.ExecutedAt
+		existing.UpdatedAt = tx.ExecutedAt
+		return s.positions.UpdatePosition(ctx, existing)
+	}
+
+	newQty := existing.NetQuantity.Add(qty)
+	existing.AvgCostPerShare = existing.NetQuantity.Mul(existing.AvgCostPerShare).
+		Add(qty.Mul(tx.FillPrice)).
+		Add(tx.Fees).
+		Div(newQty)
+	existing.NetQuantity = newQty
+	existing.UpdatedAt = tx.ExecutedAt
+	return s.positions.UpdatePosition(ctx, existing)
+}
+
+// equitySell updates the stock position for a sell.
+//
+//	realized = qty × sell_price − sell_fees − qty × avg_cost_per_share
+func (s *PositionService) equitySell(ctx context.Context, chainID string, tx domain.Transaction) error {
+	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return fmt.Errorf("no position for %s (short selling not supported)", tx.Instrument.Symbol)
+		}
+		return fmt.Errorf("get position: %w", err)
+	}
+
+	qty := tx.Quantity.Abs()
+	if qty.GreaterThan(existing.NetQuantity) {
+		return fmt.Errorf("sell %s shares of %s but only %s held", qty, tx.Instrument.Symbol, existing.NetQuantity)
+	}
+
+	realized := qty.Mul(tx.FillPrice).Sub(tx.Fees).Sub(qty.Mul(existing.AvgCostPerShare))
+	existing.NetQuantity = existing.NetQuantity.Sub(qty)
+	existing.RealizedPnL = existing.RealizedPnL.Add(realized)
+	existing.UpdatedAt = tx.ExecutedAt
+	if existing.NetQuantity.IsZero() {
+		existing.ClosedAt = &tx.ExecutedAt
+	}
+	return s.positions.UpdatePosition(ctx, existing)
+}
+
+// allEquity reports whether every transaction in txns is an equity (stock) trade.
+// Returns false for an empty slice.
+func allEquity(txns []domain.Transaction) bool {
+	if len(txns) == 0 {
+		return false
+	}
+	for _, tx := range txns {
+		if tx.Instrument.AssetClass != domain.AssetClassEquity {
+			return false
+		}
+	}
+	return true
 }

@@ -35,10 +35,18 @@ type OptionDetails struct {
 	OSI        string
 }
 
+func (opt OptionDetails) String() string {
+	return fmt.Sprintf("%s%s %s", opt.Strike, opt.OptionType, opt.Expiration.Format("20060102"))
+}
+
 // FutureDetails contains the contract-specific parameters for a futures instrument.
 type FutureDetails struct {
 	ExpiryMonth  time.Time
 	ExchangeCode string
+}
+
+func (f FutureDetails) String() string {
+	return f.ExpiryMonth.Format("200601")
 }
 
 // Instrument represents a tradeable security: equity, option, or future.
@@ -75,4 +83,19 @@ func (inst Instrument) InstrumentID() string {
 		inst.Symbol, inst.AssetClass, expiration, strike, optionType, expiryMonth, exchangeCode)
 	sum := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", sum)
+}
+
+func (inst Instrument) String() string {
+	var desc string
+	switch inst.AssetClass {
+	case AssetClassEquity:
+		desc = inst.Symbol
+	case AssetClassEquityOption:
+		desc = fmt.Sprintf("%s %s", inst.Symbol, inst.Option)
+	case AssetClassFuture:
+		desc = inst.FuturesRoot
+	case AssetClassFutureOption:
+		desc = fmt.Sprintf("%s %s", inst.FuturesRoot, inst.Option)
+	}
+	return desc
 }

@@ -334,42 +334,42 @@ func TestPositionService_ExpirationAtZero(t *testing.T) {
 	assert.True(t, expected.Equal(pos.RealizedPnL), "got %s", pos.RealizedPnL)
 }
 
-// TestPositionService_LongPositionPnL: BTO then SELL realizes correct P&L.
-func TestPositionService_LongPositionPnL(t *testing.T) {
+// TestPositionService_EquityCreatesStockPosition: equity (stock) transactions are handled by
+// processEquityTrade inside PositionService — no lots are created; a stock position is.
+func TestPositionService_EquityCreatesStockPosition(t *testing.T) {
 	ctx := context.Background()
 	repos := openTestDB(t)
 	svc := newPositionSvc(repos)
 	acc := seedImportAccount(t, ctx, repos)
 
 	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
-	t2 := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 	inst := makeEquity("AAPL")
 
-	// BUY 10 shares at $170, fees $0.
-	trade1ID := uuid.New().String()
-	buyTx := makeTransaction(trade1ID, "long-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
+	tradeID := uuid.New().String()
+	buyTx := makeTransaction(tradeID, "eq-stock-001", acc.ID, acc.Broker, inst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
 	buyTx.FillPrice = decimal.NewFromFloat(170)
-	buyTx.Fees = decimal.Zero
-	seedPositionTrade(t, ctx, repos, acc, trade1ID, t1, buyTx)
-	chainID := seedPositionChain(t, ctx, repos, acc, trade1ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade1ID, []domain.Transaction{buyTx}, chainID, domain.StrategyUnknown))
+	buyTx.Fees = decimal.NewFromFloat(0.65)
+	seedPositionTrade(t, ctx, repos, acc, tradeID, t1, buyTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID, domain.StrategyStock)
 
-	// SELL 10 shares at $180, fees $0.
-	trade2ID := uuid.New().String()
-	sellTx := makeTransaction(trade2ID, "long-002", acc.ID, acc.Broker, inst, domain.ActionSell, domain.PositionEffectClosing, 10, t2)
-	sellTx.FillPrice = decimal.NewFromFloat(180)
-	sellTx.Fees = decimal.Zero
-	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, sellTx)
-	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{sellTx}, chainID, domain.StrategyUnknown))
-
-	// P&L: close_cf = +1 × 180 × 10 × 1 = 1800
-	//       open_cf = -1 × 170 × 10 × 1 = -1700
-	//       pnl = 1800 - 1700 = 100
-	pos, err := repos.Positions.GetPositionByTradeID(ctx, acc.ID, trade1ID)
+	err := svc.ProcessTrade(ctx, tradeID, []domain.Transaction{buyTx}, chainID, domain.StrategyStock)
 	require.NoError(t, err)
-	assert.NotNil(t, pos.ClosedAt)
-	expected := decimal.NewFromFloat(100)
-	assert.True(t, expected.Equal(pos.RealizedPnL), "got %s", pos.RealizedPnL)
+
+	// No lots — equity WAC does not use the lot table.
+	lots, err := repos.Positions.ListOpenLotsByInstrument(ctx, acc.ID, inst.InstrumentID())
+	require.NoError(t, err)
+	assert.Empty(t, lots)
+
+	// A stock position should have been created with WAC fields set.
+	positions, err := repos.Positions.ListPositions(ctx, acc.ID, false, false)
+	require.NoError(t, err)
+	require.Len(t, positions, 1)
+	pos := positions[0]
+	assert.Equal(t, domain.StrategyStock, pos.StrategyType)
+	assert.True(t, decimal.NewFromFloat(10).Equal(pos.NetQuantity), "net_quantity: %s", pos.NetQuantity)
+	// avg_cost = (10*170 + 0.65) / 10 = 170.065
+	expectedAvg := decimal.NewFromFloat(170.065)
+	assert.True(t, expectedAvg.Equal(pos.AvgCostPerShare), "avg_cost_per_share: %s", pos.AvgCostPerShare)
 }
 
 // TestPositionService_RollDoesNotClosePosition: a mixed trade (roll) should close the
@@ -463,20 +463,10 @@ func TestPositionService_OpenPositionsListing(t *testing.T) {
 	seedPositionTrade(t, ctx, repos, acc, trade2ID, t2, closeTx)
 	require.NoError(t, svc.ProcessTrade(ctx, trade2ID, []domain.Transaction{closeTx}, chainID1, domain.StrategyUnknown))
 
-	// Open another trade (AAPL equity).
-	aaplInst := makeEquity("AAPL")
-	trade3ID := uuid.New().String()
-	buyTx := makeTransaction(trade3ID, "opl-003", acc.ID, acc.Broker, aaplInst, domain.ActionBuy, domain.PositionEffectOpening, 10, t1)
-	buyTx.FillPrice = decimal.NewFromFloat(170)
-	buyTx.Fees = decimal.Zero
-	seedPositionTrade(t, ctx, repos, acc, trade3ID, t1, buyTx)
-	chainID3 := seedPositionChain(t, ctx, repos, acc, trade3ID)
-	require.NoError(t, svc.ProcessTrade(ctx, trade3ID, []domain.Transaction{buyTx}, chainID3, domain.StrategyUnknown))
-
+	// Equity trades are handled by StockPositionService; PositionService sees zero open positions.
 	open, err := repos.Positions.ListPositions(ctx, acc.ID, true, false)
 	require.NoError(t, err)
-	require.Len(t, open, 1, "only AAPL position should be open")
-	assert.Equal(t, "AAPL", open[0].UnderlyingSymbol)
+	require.Empty(t, open, "SPY options position was closed; no open options positions remain")
 }
 
 // TestPositionService_ChainedPositionPnL: when a lot has a chain_id the position is

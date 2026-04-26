@@ -197,6 +197,11 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 		return "", "", fmt.Errorf("list transactions: %w", err)
 	}
 
+	// Equity-only trades get a durable per-symbol chain instead of an episode chain.
+	if allEquityTxns(txns) {
+		return s.findOrCreateStockChain(ctx, trade, txns)
+	}
+
 	var hasOpening, hasClosing bool
 	for _, tx := range txns {
 		switch tx.PositionEffect {
@@ -264,7 +269,20 @@ func (s *ChainService) startChain(ctx context.Context, trade *domain.Trade, txns
 	if err != nil {
 		return "", "", fmt.Errorf("generate chain id: %w", err)
 	}
-	strategyType := s.classifier.Classify(strategy.FromTransactions(txns))
+	legs := strategy.FromTransactions(txns)
+	strategyType := s.classifier.Classify(legs)
+	if strategyType == domain.StrategyUnknown {
+		legStrs := make([]string, len(legs))
+		for i, l := range legs {
+			legStrs[i] = l.String()
+		}
+		slog.Error("chain service: unclassified strategy",
+			"trade_id", trade.ID,
+			"account_id", trade.AccountID,
+			"symbol", trade.UnderlyingSymbol,
+			"legs", legStrs,
+		)
+	}
 	chain := &domain.Chain{
 		ID:               chainID.String(),
 		AccountID:        trade.AccountID,
@@ -415,6 +433,74 @@ func computeCreditDebit(txns []domain.Transaction) decimal.Decimal {
 		total = total.Add(sign.Mul(tx.FillPrice).Mul(tx.Quantity.Abs()).Mul(multiplier))
 	}
 	return total
+}
+
+// findOrCreateStockChain returns the durable stock chain for the trade's symbol,
+// creating it on first encounter. Subsequent trades for the same (account, symbol)
+// are recorded as chain links so that GetChainByTradeID finds them on re-runs.
+func (s *ChainService) findOrCreateStockChain(ctx context.Context, trade *domain.Trade, txns []domain.Transaction) (string, domain.StrategyType, error) {
+	symbol := underlyingSymbol(txns)
+	existing, err := s.chains.GetStockChainBySymbol(ctx, trade.AccountID, symbol)
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
+		return "", "", fmt.Errorf("find stock chain for %s: %w", symbol, err)
+	}
+
+	if errors.Is(err, domain.ErrNotFound) {
+		// First trade for this symbol — create the durable stock chain.
+		chainID, err := uuid.NewV7()
+		if err != nil {
+			return "", "", fmt.Errorf("generate chain id: %w", err)
+		}
+		chain := &domain.Chain{
+			ID:               chainID.String(),
+			AccountID:        trade.AccountID,
+			UnderlyingSymbol: symbol,
+			OriginalTradeID:  trade.ID,
+			CreatedAt:        trade.ExecutedAt,
+			StrategyType:     domain.StrategyStock,
+		}
+		if err := s.chains.CreateChain(ctx, chain); err != nil {
+			return "", "", fmt.Errorf("create stock chain: %w", err)
+		}
+		return chain.ID, domain.StrategyStock, nil
+	}
+
+	// Chain already exists — record a link so GetChainByTradeID finds this trade.
+	existingLinks, err := s.chains.ListChainLinks(ctx, existing.ID)
+	if err != nil {
+		return "", "", fmt.Errorf("list stock chain links: %w", err)
+	}
+	linkID, err := uuid.NewV7()
+	if err != nil {
+		return "", "", fmt.Errorf("generate link id: %w", err)
+	}
+	link := &domain.ChainLink{
+		ID:             linkID.String(),
+		ChainID:        existing.ID,
+		Sequence:       len(existingLinks) + 1,
+		LinkType:       domain.LinkTypeRoll,
+		ClosingTradeID: trade.ID,
+		OpeningTradeID: trade.ID,
+		LinkedAt:       trade.ExecutedAt,
+		CreditDebit:    computeCreditDebit(txns),
+	}
+	if err := s.chains.CreateChainLink(ctx, link); err != nil {
+		return "", "", fmt.Errorf("record stock chain link: %w", err)
+	}
+	return existing.ID, domain.StrategyStock, nil
+}
+
+// allEquityTxns reports whether every transaction is an equity (stock) trade.
+func allEquityTxns(txns []domain.Transaction) bool {
+	if len(txns) == 0 {
+		return false
+	}
+	for _, tx := range txns {
+		if tx.Instrument.AssetClass != domain.AssetClassEquity {
+			return false
+		}
+	}
+	return true
 }
 
 // computeStrikeExpChange computes strike and expiration deltas for a single-leg roll.

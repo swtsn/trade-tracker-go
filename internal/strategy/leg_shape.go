@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -23,6 +24,19 @@ type LegShape struct {
 	Strike     decimal.Decimal   // zero for non-options
 	Expiration time.Time         // zero for non-options; must be UTC midnight
 	Quantity   decimal.Decimal   // positive = long (BTO/BUY), negative = short (STO/SELL)
+}
+
+func (l LegShape) String() string {
+	qty := l.Quantity.String()
+	if l.Quantity.IsPositive() {
+		qty = "+" + qty
+	}
+	switch l.AssetClass {
+	case domain.AssetClassEquityOption, domain.AssetClassFutureOption:
+		return fmt.Sprintf("%s %s%s %s", qty, l.Strike, l.OptionType, l.Expiration.Format("20060102"))
+	default:
+		return fmt.Sprintf("%s %s", qty, l.AssetClass)
+	}
 }
 
 // FromLots normalizes a slice of open position lots into LegShapes for classification.
