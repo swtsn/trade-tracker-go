@@ -136,8 +136,10 @@ func ruleIronButterfly() Rule {
 	}
 }
 
-// ruleIronCondor returns a Rule that matches an iron condor: two put spreads and two call spreads
-// all at the same expiration, with the short put strike strictly below the short call strike.
+// ruleIronCondor returns a Rule that matches an iron condor: one long and one short put plus
+// one long and one short call, all at the same expiration, where every put strike is strictly
+// below every call strike. The rule accepts credit, debit, and mixed-width variants because
+// partial fills often produce asymmetric leg orderings that are still logically one condor.
 func ruleIronCondor() Rule {
 	return Rule{
 		Name: domain.StrategyIronCondor,
@@ -160,19 +162,18 @@ func ruleIronCondor() Rule {
 			if len(shortPuts) != 1 || len(longPuts) != 1 || len(shortCalls) != 1 || len(longCalls) != 1 {
 				return false
 			}
-			// Put spread correctly ordered: longPut < shortPut
-			if !longPuts[0].Strike.LessThan(shortPuts[0].Strike) {
-				return false
+			// Every put strike must be strictly below every call strike.
+			// This naturally excludes iron butterflies (equal center strikes) and rejects
+			// inverted structures without caring about the ordering within each spread.
+			maxPut := shortPuts[0].Strike
+			if longPuts[0].Strike.GreaterThan(maxPut) {
+				maxPut = longPuts[0].Strike
 			}
-			// Call spread correctly ordered: shortCall < longCall
-			if !shortCalls[0].Strike.LessThan(longCalls[0].Strike) {
-				return false
+			minCall := shortCalls[0].Strike
+			if longCalls[0].Strike.LessThan(minCall) {
+				minCall = longCalls[0].Strike
 			}
-			// Short put must sit strictly below short call (rejects inverted condors).
-			// LessThan excludes the equal-strike case, which is an iron butterfly — this
-			// makes the rule self-exclusive from ruleIronButterfly by predicate alone,
-			// not by registration order. Do not weaken to LessThanOrEqual.
-			return shortPuts[0].Strike.LessThan(shortCalls[0].Strike)
+			return maxPut.LessThan(minCall)
 		},
 	}
 }

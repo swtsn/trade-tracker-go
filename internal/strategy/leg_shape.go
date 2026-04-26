@@ -67,8 +67,21 @@ func FromLots(lots []domain.PositionLot) []LegShape {
 // Transactions with an unrecognized Action (e.g. ActionExercise, ActionExpiration) are
 // silently skipped — they do not represent market-opening legs. Transactions with a
 // non-positive Quantity are also skipped; broker quantities are always positive.
+//
+// Transactions for the same instrument (same asset class, option type, strike, expiration)
+// are merged by summing their quantities. This handles partial fills and multi-lot orders
+// that brokers report as one row per fill rather than one row per leg.
 func FromTransactions(txs []domain.Transaction) []LegShape {
+	type legKey struct {
+		AssetClass domain.AssetClass
+		OptionType domain.OptionType
+		Strike     string
+		Expiration time.Time
+	}
+
+	seen := make(map[legKey]int) // key → index in legs
 	var legs []LegShape
+
 	for _, tx := range txs {
 		if tx.PositionEffect != domain.PositionEffectOpening {
 			continue
@@ -96,7 +109,27 @@ func FromTransactions(txs []domain.Transaction) []LegShape {
 			leg.Strike = tx.Instrument.Option.Strike
 			leg.Expiration = tx.Instrument.Option.Expiration
 		}
-		legs = append(legs, leg)
+		key := legKey{
+			AssetClass: leg.AssetClass,
+			OptionType: leg.OptionType,
+			Strike:     leg.Strike.String(),
+			Expiration: leg.Expiration,
+		}
+		if idx, ok := seen[key]; ok {
+			legs[idx].Quantity = legs[idx].Quantity.Add(qty)
+		} else {
+			seen[key] = len(legs)
+			legs = append(legs, leg)
+		}
 	}
-	return legs
+
+	// Remove legs that netted to zero (e.g. a correcting fill with opposite direction).
+	// Zero-quantity legs have no classifier rule and would produce StrategyUnknown.
+	out := legs[:0]
+	for _, l := range legs {
+		if !l.Quantity.IsZero() {
+			out = append(out, l)
+		}
+	}
+	return out
 }

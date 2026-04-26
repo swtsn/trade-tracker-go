@@ -74,6 +74,7 @@ func positionToProto(pos *domain.Position) *pb.Position {
 		UnderlyingSymbol:    pos.UnderlyingSymbol,
 		StrategyType:        strategyTypeToProto(pos.StrategyType),
 		CostBasis:           pos.CostBasis.String(),
+		RealizedPnl:         pos.RealizedPnL.String(),
 		NetQuantity:         pos.NetQuantity.String(),
 		AvgCostPerShare:     pos.AvgCostPerShare.String(),
 		OpenedAt:            timestamppb.New(pos.OpenedAt),
@@ -81,7 +82,6 @@ func positionToProto(pos *domain.Position) *pb.Position {
 	}
 	if pos.ClosedAt != nil {
 		p.ClosedAt = timestamppb.New(*pos.ClosedAt)
-		p.RealizedPnl = pos.RealizedPnL.String()
 	}
 	return p
 }

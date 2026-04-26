@@ -298,9 +298,16 @@ func optionMultiplier(inst domain.Instrument) decimal.Decimal {
 	return decimal.NewFromInt(1)
 }
 
-// processEquityTrade processes all equity transactions for a stock position using WAC.
-// Transactions are sorted chronologically before processing.
+// processEquityTrade processes all equity transactions for a stock position using WAC
+// (Weighted Average Cost). Transactions are sorted chronologically before processing.
+// Not concurrent-safe: the guard in equitySell and the subsequent UpdatePosition are not
+// atomic; concurrent or overlapping imports for the same account may produce incorrect results.
 func (s *PositionService) processEquityTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
+	for _, tx := range txns {
+		if tx.TradeID != tradeID {
+			return fmt.Errorf("position service: transaction %s has trade_id %q, expected %q", tx.ID, tx.TradeID, tradeID)
+		}
+	}
 	sorted := make([]domain.Transaction, len(txns))
 	copy(sorted, txns)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -324,12 +331,15 @@ func (s *PositionService) processEquityTrade(ctx context.Context, tradeID string
 	return nil
 }
 
-// equityBuy creates or updates the stock position for a buy using WAC.
+// equityBuy creates or updates the stock position for a buy using WAC (Weighted Average Cost).
 //
 //	new_avg = (held_qty × old_avg + buy_qty × price + fees) / new_total_qty
 func (s *PositionService) equityBuy(ctx context.Context, tradeID, chainID string, tx domain.Transaction) error {
 	qty := tx.Quantity.Abs()
-	avgCost := tx.FillPrice.Mul(qty).Add(tx.Fees).Div(qty)
+	if qty.IsZero() {
+		return fmt.Errorf("equity buy tx %s has zero quantity", tx.ID)
+	}
+	avgCost := tx.FillPrice.Add(tx.Fees.Div(qty))
 
 	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
 	if errors.Is(err, domain.ErrNotFound) {
@@ -402,7 +412,7 @@ func (s *PositionService) equitySell(ctx context.Context, chainID string, tx dom
 }
 
 // allEquity reports whether every transaction in txns is an equity (stock) trade.
-// Returns false for an empty slice.
+// Returns false for an empty slice: an empty trade should not be routed to the equity path.
 func allEquity(txns []domain.Transaction) bool {
 	if len(txns) == 0 {
 		return false

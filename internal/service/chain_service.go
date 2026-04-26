@@ -198,7 +198,7 @@ func (s *ChainService) processTrade(ctx context.Context, trade *domain.Trade) (s
 	}
 
 	// Equity-only trades get a durable per-symbol chain instead of an episode chain.
-	if allEquityTxns(txns) {
+	if allEquity(txns) {
 		return s.findOrCreateStockChain(ctx, trade, txns)
 	}
 
@@ -488,19 +488,6 @@ func (s *ChainService) findOrCreateStockChain(ctx context.Context, trade *domain
 		return "", "", fmt.Errorf("record stock chain link: %w", err)
 	}
 	return existing.ID, domain.StrategyStock, nil
-}
-
-// allEquityTxns reports whether every transaction is an equity (stock) trade.
-func allEquityTxns(txns []domain.Transaction) bool {
-	if len(txns) == 0 {
-		return false
-	}
-	for _, tx := range txns {
-		if tx.Instrument.AssetClass != domain.AssetClassEquity {
-			return false
-		}
-	}
-	return true
 }
 
 // computeStrikeExpChange computes strike and expiration deltas for a single-leg roll.

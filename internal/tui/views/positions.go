@@ -427,9 +427,9 @@ func computeOpenLegs(events []*pb.ChainEvent) [][3]string {
 // legSign returns +1 for actions that increase net position, -1 for those that decrease it.
 func legSign(a pb.Action) float64 {
 	switch a {
-	case pb.Action_ACTION_BTO, pb.Action_ACTION_BTC, pb.Action_ACTION_BUY, pb.Action_ACTION_ASSIGNMENT:
+	case pb.Action_ACTION_BTO, pb.Action_ACTION_BUY, pb.Action_ACTION_ASSIGNMENT:
 		return 1
-	default: // STO, STC, SELL, EXPIRATION, EXERCISE
+	default: // BTC, STO, STC, SELL, EXPIRATION, EXERCISE
 		return -1
 	}
 }
