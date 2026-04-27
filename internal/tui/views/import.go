@@ -35,7 +35,8 @@ const (
 )
 
 // maxImportFileBytes is the upper bound for CSV files accepted by the import flow.
-const maxImportFileBytes = 50 << 20 // 50 MiB
+// Must match maxCSVBytes in internal/grpc/import_handler.go.
+const maxImportFileBytes = 32 << 20 // 32 MiB
 
 // ImportView handles the CSV import flow.
 type ImportView struct {

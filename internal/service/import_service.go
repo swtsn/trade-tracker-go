@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 
 	"trade-tracker-go/internal/domain"
@@ -44,6 +45,7 @@ type ImportService struct {
 	instruments repository.InstrumentRepository
 	chainer     TradeChainer
 	hooks       []PostImportHook
+	logger      *slog.Logger
 }
 
 // NewImportService creates an ImportService with the given dependencies.
@@ -54,6 +56,7 @@ func NewImportService(
 	txns repository.TransactionRepository,
 	instruments repository.InstrumentRepository,
 	chainer TradeChainer,
+	logger *slog.Logger,
 	hooks ...PostImportHook,
 ) *ImportService {
 	return &ImportService{
@@ -62,6 +65,7 @@ func NewImportService(
 		instruments: instruments,
 		chainer:     chainer,
 		hooks:       hooks,
+		logger:      logger,
 	}
 }
 
@@ -162,22 +166,23 @@ func (s *ImportService) Import(ctx context.Context, txs []domain.Transaction) (*
 // layer (deferred — see docs/future.md).
 func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []domain.Transaction, result *ImportResult) error {
 	if !allSameUnderlying(txs) {
-		result.Failed++
-		result.Errors = append(result.Errors, ImportError{
+		ie := ImportError{
 			TradeID: tradeID,
 			Err:     fmt.Errorf("mixed underlying symbols in trade group — possible CSV grouping error"),
-		})
+		}
+		s.logger.Error("import: trade failed", "trade_id", tradeID, "err", ie.Err)
+		result.Failed++
+		result.Errors = append(result.Errors, ie)
 		return nil
 	}
 
 	trade := buildTrade(tradeID, txs)
 
 	if err := s.trades.Create(ctx, trade); err != nil {
+		ie := ImportError{TradeID: tradeID, Err: fmt.Errorf("create trade: %w", err)}
+		s.logger.Error("import: trade failed", "trade_id", tradeID, "err", ie.Err)
 		result.Failed++
-		result.Errors = append(result.Errors, ImportError{
-			TradeID: tradeID,
-			Err:     fmt.Errorf("create trade: %w", err),
-		})
+		result.Errors = append(result.Errors, ie)
 		return nil
 	}
 
@@ -186,11 +191,10 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	orderedTxs := closingFirst(txs)
 	for _, tx := range orderedTxs {
 		if err := s.txns.Create(ctx, &tx); err != nil {
+			ie := ImportError{TradeID: tradeID, Err: fmt.Errorf("create transaction %s: %w", tx.BrokerTxID, err)}
+			s.logger.Error("import: trade failed", "trade_id", tradeID, "err", ie.Err)
 			result.Failed++
-			result.Errors = append(result.Errors, ImportError{
-				TradeID: tradeID,
-				Err:     fmt.Errorf("create transaction %s: %w", tx.BrokerTxID, err),
-			})
+			result.Errors = append(result.Errors, ie)
 			return nil
 		}
 	}
@@ -199,11 +203,10 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	// strategyType is classified inside ChainService.startChain and returned here for hooks.
 	chainID, strategyType, err := s.chainer.ProcessTrade(ctx, tradeID)
 	if err != nil {
+		ie := ImportError{TradeID: tradeID, Err: fmt.Errorf("chain trade: %w", err)}
+		s.logger.Error("import: trade failed", "trade_id", tradeID, "err", ie.Err)
 		result.Failed++
-		result.Errors = append(result.Errors, ImportError{
-			TradeID: tradeID,
-			Err:     fmt.Errorf("chain trade: %w", err),
-		})
+		result.Errors = append(result.Errors, ie)
 		return nil
 	}
 
@@ -221,13 +224,11 @@ func (s *ImportService) processTrade(ctx context.Context, tradeID string, txs []
 	hookFailed := false
 	for _, hook := range s.hooks {
 		if err := hook.Run(ctx, trade.ID, orderedTxs, chainID, strategyType); err != nil {
+			ie := ImportError{TradeID: tradeID, HookName: hook.Name, Err: fmt.Errorf("hook %q: %w", hook.Name, err)}
+			s.logger.Error("import: hook failed", "trade_id", tradeID, "hook", hook.Name, "err", ie.Err)
 			hookFailed = true
 			result.Failed++
-			result.Errors = append(result.Errors, ImportError{
-				TradeID:  tradeID,
-				HookName: hook.Name,
-				Err:      fmt.Errorf("hook %q: %w", hook.Name, err),
-			})
+			result.Errors = append(result.Errors, ie)
 			break
 		}
 	}

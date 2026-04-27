@@ -198,6 +198,11 @@ func mapAction(action string) (domain.Action, domain.PositionEffect, error) {
 		return domain.ActionBTC, domain.PositionEffectClosing, nil
 	case "SELL_TO_CLOSE":
 		return domain.ActionSTC, domain.PositionEffectClosing, nil
+	case "BUY":
+		// Futures use bare BUY/SELL instead of the directional TO_OPEN/TO_CLOSE form.
+		return domain.ActionBuy, domain.PositionEffectOpening, nil
+	case "SELL":
+		return domain.ActionSell, domain.PositionEffectClosing, nil
 	default:
 		return "", "", fmt.Errorf("unrecognized action %q", action)
 	}
@@ -213,6 +218,13 @@ func parseInstrument(record []string) (domain.Instrument, error) {
 		return domain.Instrument{
 			Symbol:     symbol,
 			AssetClass: domain.AssetClassEquity,
+		}, nil
+
+	case "Future":
+		return domain.Instrument{
+			Symbol:     symbol,
+			AssetClass: domain.AssetClassFuture,
+			Future:     &domain.FutureDetails{},
 		}, nil
 
 	case "Equity Option":

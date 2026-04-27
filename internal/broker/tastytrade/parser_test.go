@@ -107,6 +107,34 @@ func TestParser_Equity_BuyToOpen(t *testing.T) {
 	assert.True(t, decimal.NewFromFloat(32.52).Equal(tx.FillPrice))
 }
 
+func TestParser_Future_Sell(t *testing.T) {
+	row := "2025-10-14T07:20:03-0700,Trade,Sell,SELL,/MCLZ5,Future,Sold 1 /MCLZ5 @ 57.92,0.00,1,0.00,-0.75,-0.82,,,,,,,413432751,-1.57,USD\n"
+	txs := parse(t, row)
+	require.Len(t, txs, 1)
+	tx := txs[0]
+
+	assert.Equal(t, domain.ActionSell, tx.Action)
+	assert.Equal(t, domain.PositionEffectClosing, tx.PositionEffect)
+	assert.Equal(t, "/MCLZ5", tx.Instrument.Symbol)
+	assert.Equal(t, domain.AssetClassFuture, tx.Instrument.AssetClass)
+	assert.Nil(t, tx.Instrument.Option)
+	assert.NotNil(t, tx.Instrument.Future)
+	assert.True(t, decimal.NewFromInt(1).Equal(tx.Quantity))
+	assert.True(t, decimal.NewFromFloat(0.75+0.82).Equal(tx.Fees))
+}
+
+func TestParser_Future_Buy(t *testing.T) {
+	row := "2025-10-13T09:15:00-0700,Trade,Buy,BUY,/MCLZ5,Future,Bought 1 /MCLZ5 @ 57.10,0.00,1,0.00,-0.75,-0.82,,,,,,,413432750,-1.57,USD\n"
+	txs := parse(t, row)
+	require.Len(t, txs, 1)
+	tx := txs[0]
+
+	assert.Equal(t, domain.ActionBuy, tx.Action)
+	assert.Equal(t, domain.PositionEffectOpening, tx.PositionEffect)
+	assert.Equal(t, "/MCLZ5", tx.Instrument.Symbol)
+	assert.Equal(t, domain.AssetClassFuture, tx.Instrument.AssetClass)
+}
+
 func TestParser_MultiLegSameTradeID(t *testing.T) {
 	// 4-leg iron condor: all legs share Order # 451325787
 	rows := "2026-04-01T09:16:26-0700,Trade,Buy to Open,BUY_TO_OPEN,IWM   260515P00220000,Equity Option,Bought 2 IWM 05/15/26 Put 220.00 @ 1.94,-388.00,2,-194.00,-2.00,-0.25,100,IWM,IWM,5/15/26,220,PUT,451325787,-390.25,USD\n" +

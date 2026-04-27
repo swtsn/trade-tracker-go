@@ -15,9 +15,9 @@ import (
 	"trade-tracker-go/internal/service"
 )
 
-// maxCSVBytes is the maximum accepted size for csv_data (1 MiB).
-// Files produced by Tastytrade and Schwab exports are well under this limit.
-const maxCSVBytes = 1 << 20
+// maxCSVBytes is the maximum accepted size for csv_data (32 MiB).
+// Must stay in sync with MaxRecvMsgSize on the server and MaxCallSendMsgSize on the client.
+const maxCSVBytes = 32 << 20
 
 // errUnsupportedBroker is returned by parseBrokerCSV when the broker value is not
 // recognised. It is distinct from parse errors so the handler can produce a

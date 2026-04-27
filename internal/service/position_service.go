@@ -64,7 +64,14 @@ func (s *PositionService) ProcessTrade(ctx context.Context, tradeID string, txns
 		case domain.PositionEffectClosing:
 			if err := s.processClosing(ctx, tx); err != nil {
 				if errors.Is(err, ErrNoOpenLots) {
-					s.logger.Warn("closing tx skipped: no open lots", "tx_id", tx.ID, "err", err)
+					s.logger.Warn("closing tx skipped: no open lots",
+						"tx_id", tx.ID,
+						"broker_tx_id", tx.BrokerTxID,
+						"symbol", tx.Instrument.Symbol,
+						"action", tx.Action,
+						"quantity", tx.Quantity,
+						"executed_at", tx.ExecutedAt,
+					)
 					continue
 				}
 				return fmt.Errorf("position service: closing tx %s: %w", tx.ID, err)

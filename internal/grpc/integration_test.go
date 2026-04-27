@@ -67,6 +67,7 @@ func startSmokeServer(t *testing.T) *smokeStack {
 		repos.Transactions,
 		repos.Instruments,
 		chainSvc,
+		testLogger,
 		service.PostImportHook{Name: "position", Run: positionSvc.ProcessTrade},
 	)
 	analyticsSvc := service.NewAnalyticsService(repos.DB())
