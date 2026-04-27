@@ -62,6 +62,7 @@ func run() error {
 		repos.Transactions,
 		repos.Instruments,
 		chainSvc,
+		logger,
 		service.PostImportHook{
 			Name: "position",
 			Run:  positionSvc.ProcessTrade,
@@ -72,9 +73,10 @@ func run() error {
 	// a slow analytics query will block other handlers for its duration.
 	analyticsSvc := service.NewAnalyticsService(repos.DB())
 
-	// Limit transport-layer receive size to 2 MiB — above any handler's documented
-	// limit (ImportHandler caps CSV at 1 MiB) but well below gRPC's 4 MiB default.
-	srv := grpc.NewServer(grpc.MaxRecvMsgSize(2 << 20))
+	// Allow messages up to 32 MiB + 1 KiB framing overhead so the ImportHandler's
+	// 32 MiB csv_data limit fires before the transport rejects the message.
+	const grpcMsgSize = (32 << 20) + (1 << 10)
+	srv := grpc.NewServer(grpc.MaxRecvMsgSize(grpcMsgSize))
 	pb.RegisterAccountServiceServer(srv, grpchandler.NewAccountHandler(repos.Accounts, repos.Accounts, logger))
 	pb.RegisterImportServiceServer(srv, grpchandler.NewImportHandler(importSvc, logger))
 	pb.RegisterTradeServiceServer(srv, grpchandler.NewTradeHandler(repos.Trades, logger))

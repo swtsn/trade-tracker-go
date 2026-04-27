@@ -179,7 +179,7 @@ func TestImportTransactions_MissingCSVData(t *testing.T) {
 
 func TestImportTransactions_CSVDataTooLarge(t *testing.T) {
 	h := grpchandler.NewImportHandler(&fakeImporter{result: &service.ImportResult{}}, testLogger)
-	oversized := []byte(strings.Repeat("a", (1<<20)+1))
+	oversized := []byte(strings.Repeat("a", (32<<20)+1))
 
 	err := h.ImportTransactions(&pb.ImportTransactionsRequest{
 		AccountId: "acct-1",

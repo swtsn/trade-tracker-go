@@ -62,9 +62,16 @@ type grpcClient struct {
 	imports   pb.ImportServiceClient
 }
 
+// grpcMsgSize is the maximum gRPC message size for send and receive (32 MiB + framing).
+// Must stay in sync with MaxRecvMsgSize on the server and maxCSVBytes in the import handler.
+const grpcMsgSize = (32 << 20) + (1 << 10)
+
 // New dials addr and returns a Client. The caller must call Close() when done.
 func New(addr string) (Client, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(grpcMsgSize)),
+	)
 	if err != nil {
 		return nil, err
 	}

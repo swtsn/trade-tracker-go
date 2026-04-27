@@ -3,6 +3,8 @@ package service_test
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -46,6 +48,7 @@ func newImportService(repos *sqlite.Repos, hooks ...service.PostImportHook) *ser
 		repos.Transactions,
 		repos.Instruments,
 		chainSvc,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		hooks...,
 	)
 }
@@ -288,7 +291,7 @@ func TestImportService_PartialTransactionFailure(t *testing.T) {
 	// Fail on the 2nd transaction Create (first succeeds, second fails).
 	txRepo := &failingTxRepo{TransactionRepository: repos.Transactions, failOnNth: 2}
 	chainSvc := service.NewChainService(repos.Chains, repos.Trades, repos.Transactions, strategy.NewClassifier())
-	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, chainSvc)
+	svc := service.NewImportService(repos.Trades, txRepo, repos.Instruments, chainSvc, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	exp := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
 	tradeID := uuid.New().String()
