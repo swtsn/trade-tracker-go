@@ -562,6 +562,264 @@ func TestPositionService_EquityZeroQuantityReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "zero quantity")
 }
 
+// TestPositionService_EquityShortOpen: selling short creates a negative-quantity position.
+func TestPositionService_EquityShortOpen(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+
+	tradeID := uuid.New().String()
+	shortTx := makeTransaction(tradeID, "short-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 10, t1)
+	shortTx.FillPrice = decimal.NewFromFloat(200)
+	shortTx.Fees = decimal.NewFromFloat(1.00)
+	seedPositionTrade(t, ctx, repos, acc, tradeID, t1, shortTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID, domain.StrategyStock)
+
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID, []domain.Transaction{shortTx}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.StrategyStock, pos.StrategyType)
+	// net_quantity is negative for a short position.
+	assert.True(t, decimal.NewFromFloat(-10).Equal(pos.NetQuantity), "net_quantity: %s", pos.NetQuantity)
+	// avg_cost = fill_price - fees/qty = 200 - 1/10 = 199.9
+	expectedAvg := decimal.NewFromFloat(199.9)
+	assert.True(t, expectedAvg.Equal(pos.AvgCostPerShare), "avg_cost: %s", pos.AvgCostPerShare)
+	assert.Nil(t, pos.ClosedAt)
+}
+
+// TestPositionService_EquityShortOpenAccumulation: adding to an existing short blends WAC correctly.
+func TestPositionService_EquityShortOpenAccumulation(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+
+	// First short: 10 shares at $200, no fees. avg = 200.
+	tradeID1 := uuid.New().String()
+	short1 := makeTransaction(tradeID1, "soa-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 10, t1)
+	short1.FillPrice = decimal.NewFromFloat(200)
+	short1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, short1)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{short1}, chainID, domain.StrategyStock))
+
+	// Second short: 5 more shares at $210, no fees.
+	// WAC = (10×200 + 5×210) / 15 = (2000 + 1050) / 15 = 203.333...
+	tradeID2 := uuid.New().String()
+	short2 := makeTransaction(tradeID2, "soa-002", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 5, t2)
+	short2.FillPrice = decimal.NewFromFloat(210)
+	short2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, short2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{short2}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.NewFromFloat(-15).Equal(pos.NetQuantity), "net_quantity: %s", pos.NetQuantity)
+	// 3050 / 15 = 203.3333...
+	expectedAvg := decimal.NewFromFloat(3050).Div(decimal.NewFromFloat(15))
+	assert.True(t, expectedAvg.Equal(pos.AvgCostPerShare), "wac: %s (expected %s)", pos.AvgCostPerShare, expectedAvg)
+}
+
+// TestPositionService_EquityShortMultiCycle: cover-all → re-short → cover-all preserves realized P&L.
+func TestPositionService_EquityShortMultiCycle(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	t3 := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+	t4 := time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)
+
+	// Cycle 1: short 10 @ $200, cover all @ $180. Realized = 10×(200−180) = +200.
+	tradeID1 := uuid.New().String()
+	short1 := makeTransaction(tradeID1, "smc-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 10, t1)
+	short1.FillPrice = decimal.NewFromFloat(200)
+	short1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, short1)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{short1}, chainID, domain.StrategyStock))
+
+	tradeID2 := uuid.New().String()
+	cover1 := makeTransaction(tradeID2, "smc-002", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 10, t2)
+	cover1.FillPrice = decimal.NewFromFloat(180)
+	cover1.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, cover1)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{cover1}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.NotNil(t, pos.ClosedAt, "position should be closed after covering all")
+	assert.True(t, decimal.NewFromFloat(200).Equal(pos.RealizedPnL), "cycle 1 pnl: %s", pos.RealizedPnL)
+
+	// Cycle 2: re-short 5 @ $190, cover all @ $170. Realized = 5×(190−170) = +100. Cumulative = +300.
+	tradeID3 := uuid.New().String()
+	short2 := makeTransaction(tradeID3, "smc-003", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 5, t3)
+	short2.FillPrice = decimal.NewFromFloat(190)
+	short2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID3, t3, short2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID3, []domain.Transaction{short2}, chainID, domain.StrategyStock))
+
+	pos, err = repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.Nil(t, pos.ClosedAt, "ClosedAt must be cleared on re-short")
+	assert.True(t, decimal.NewFromFloat(-5).Equal(pos.NetQuantity), "re-shorted: %s", pos.NetQuantity)
+
+	tradeID4 := uuid.New().String()
+	cover2 := makeTransaction(tradeID4, "smc-004", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 5, t4)
+	cover2.FillPrice = decimal.NewFromFloat(170)
+	cover2.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID4, t4, cover2)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID4, []domain.Transaction{cover2}, chainID, domain.StrategyStock))
+
+	pos, err = repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.NotNil(t, pos.ClosedAt, "position should be closed after second cover-all")
+	assert.True(t, decimal.NewFromFloat(300).Equal(pos.RealizedPnL), "cumulative pnl: %s", pos.RealizedPnL)
+}
+
+// TestPositionService_EquityShortCoverProfit: covering a short at a lower price realizes profit.
+func TestPositionService_EquityShortCoverProfit(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+
+	// Short 10 shares at $200, no fees.
+	tradeID1 := uuid.New().String()
+	shortTx := makeTransaction(tradeID1, "sc-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 10, t1)
+	shortTx.FillPrice = decimal.NewFromFloat(200)
+	shortTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, shortTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{shortTx}, chainID, domain.StrategyStock))
+
+	// Cover 10 shares at $150, no fees: realized = 10 × (200 − 150) = +500.
+	tradeID2 := uuid.New().String()
+	coverTx := makeTransaction(tradeID2, "sc-002", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 10, t2)
+	coverTx.FillPrice = decimal.NewFromFloat(150)
+	coverTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, coverTx)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{coverTx}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.Zero.Equal(pos.NetQuantity), "fully covered: %s", pos.NetQuantity)
+	assert.NotNil(t, pos.ClosedAt)
+	assert.True(t, decimal.NewFromFloat(500).Equal(pos.RealizedPnL), "realized pnl: %s", pos.RealizedPnL)
+}
+
+// TestPositionService_EquityShortCoverLoss: covering a short at a higher price realizes a loss.
+func TestPositionService_EquityShortCoverLoss(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+
+	tradeID1 := uuid.New().String()
+	shortTx := makeTransaction(tradeID1, "scl-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 5, t1)
+	shortTx.FillPrice = decimal.NewFromFloat(100)
+	shortTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, shortTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{shortTx}, chainID, domain.StrategyStock))
+
+	// Cover at $120: realized = 5 × (100 − 120) = −100.
+	tradeID2 := uuid.New().String()
+	coverTx := makeTransaction(tradeID2, "scl-002", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 5, t2)
+	coverTx.FillPrice = decimal.NewFromFloat(120)
+	coverTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, coverTx)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{coverTx}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.NotNil(t, pos.ClosedAt)
+	assert.True(t, decimal.NewFromFloat(-100).Equal(pos.RealizedPnL), "realized pnl: %s", pos.RealizedPnL)
+}
+
+// TestPositionService_EquityShortPartialCover: covering only part of a short leaves the position open.
+func TestPositionService_EquityShortPartialCover(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC)
+
+	tradeID1 := uuid.New().String()
+	shortTx := makeTransaction(tradeID1, "spc-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 10, t1)
+	shortTx.FillPrice = decimal.NewFromFloat(100)
+	shortTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, shortTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{shortTx}, chainID, domain.StrategyStock))
+
+	// Cover 4 of 10: realized = 4 × (100 − 80) = +80.
+	tradeID2 := uuid.New().String()
+	coverTx := makeTransaction(tradeID2, "spc-002", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 4, t2)
+	coverTx.FillPrice = decimal.NewFromFloat(80)
+	coverTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, coverTx)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{coverTx}, chainID, domain.StrategyStock))
+
+	pos, err := repos.Positions.GetPositionByChainID(ctx, acc.ID, chainID)
+	require.NoError(t, err)
+	assert.True(t, decimal.NewFromFloat(-6).Equal(pos.NetQuantity), "remaining short: %s", pos.NetQuantity)
+	assert.Nil(t, pos.ClosedAt, "position still open")
+	assert.True(t, decimal.NewFromFloat(80).Equal(pos.RealizedPnL), "partial realized: %s", pos.RealizedPnL)
+}
+
+// TestPositionService_EquityShortCoverExceedsHeld: covering more than held returns an error.
+func TestPositionService_EquityShortCoverExceedsHeld(t *testing.T) {
+	ctx := context.Background()
+	repos := openTestDB(t)
+	svc := newPositionSvc(repos)
+	acc := seedImportAccount(t, ctx, repos)
+	inst := makeEquity("TSLA")
+
+	t1 := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC)
+
+	tradeID1 := uuid.New().String()
+	shortTx := makeTransaction(tradeID1, "sce-001", acc.ID, acc.Broker, inst, domain.ActionSTO, domain.PositionEffectOpening, 5, t1)
+	shortTx.FillPrice = decimal.NewFromFloat(100)
+	shortTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID1, t1, shortTx)
+	chainID := seedPositionChain(t, ctx, repos, acc, tradeID1, domain.StrategyStock)
+	require.NoError(t, svc.ProcessTrade(ctx, tradeID1, []domain.Transaction{shortTx}, chainID, domain.StrategyStock))
+
+	tradeID2 := uuid.New().String()
+	coverTx := makeTransaction(tradeID2, "sce-002", acc.ID, acc.Broker, inst, domain.ActionBTC, domain.PositionEffectClosing, 10, t2)
+	coverTx.FillPrice = decimal.NewFromFloat(90)
+	coverTx.Fees = decimal.Zero
+	seedPositionTrade(t, ctx, repos, acc, tradeID2, t2, coverTx)
+	err := svc.ProcessTrade(ctx, tradeID2, []domain.Transaction{coverTx}, chainID, domain.StrategyStock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only 5 short")
+}
+
 // TestPositionService_RollDoesNotClosePosition: a mixed trade (roll) should close the
 // old lot but not the position, since new lots are added in the same trade.
 func TestPositionService_RollDoesNotClosePosition(t *testing.T) {

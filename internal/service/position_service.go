@@ -307,8 +307,9 @@ func optionMultiplier(inst domain.Instrument) decimal.Decimal {
 
 // processEquityTrade processes all equity transactions for a stock position using WAC
 // (Weighted Average Cost). Transactions are sorted chronologically before processing.
-// Not concurrent-safe: the guard in equitySell and the subsequent UpdatePosition are not
-// atomic; concurrent or overlapping imports for the same account may produce incorrect results.
+// Not concurrent-safe: the guards in equitySell and equityShortCover and their subsequent
+// UpdatePosition calls are not atomic; concurrent or overlapping imports for the same
+// account may produce incorrect results.
 func (s *PositionService) processEquityTrade(ctx context.Context, tradeID string, txns []domain.Transaction, chainID string) error {
 	for _, tx := range txns {
 		if tx.TradeID != tradeID {
@@ -329,6 +330,14 @@ func (s *PositionService) processEquityTrade(ctx context.Context, tradeID string
 		case domain.ActionSTC, domain.ActionSell:
 			if err := s.equitySell(ctx, chainID, tx); err != nil {
 				return fmt.Errorf("equity sell tx %s: %w", tx.ID, err)
+			}
+		case domain.ActionSTO:
+			if err := s.equityShortOpen(ctx, tradeID, chainID, tx); err != nil {
+				return fmt.Errorf("equity short open tx %s: %w", tx.ID, err)
+			}
+		case domain.ActionBTC:
+			if err := s.equityShortCover(ctx, chainID, tx); err != nil {
+				return fmt.Errorf("equity short cover tx %s: %w", tx.ID, err)
 			}
 		default:
 			s.logger.Warn("position service: unhandled equity action; skipping",
@@ -398,7 +407,7 @@ func (s *PositionService) equitySell(ctx context.Context, chainID string, tx dom
 	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return fmt.Errorf("no position for %s (short selling not supported)", tx.Instrument.Symbol)
+			return fmt.Errorf("no long position found for %s", tx.Instrument.Symbol)
 		}
 		return fmt.Errorf("get position: %w", err)
 	}
@@ -410,6 +419,100 @@ func (s *PositionService) equitySell(ctx context.Context, chainID string, tx dom
 
 	realized := qty.Mul(tx.FillPrice).Sub(tx.Fees).Sub(qty.Mul(existing.AvgCostPerShare))
 	existing.NetQuantity = existing.NetQuantity.Sub(qty)
+	existing.RealizedPnL = existing.RealizedPnL.Add(realized)
+	existing.UpdatedAt = tx.ExecutedAt
+	if existing.NetQuantity.IsZero() {
+		existing.ClosedAt = &tx.ExecutedAt
+	}
+	return s.positions.UpdatePosition(ctx, existing)
+}
+
+// equityShortOpen creates or extends a short stock position using WAC.
+//
+//	avg_short = (held × old_avg + qty × price − fees) / new_total
+//
+// Fees are subtracted (not added as in equityBuy) because they reduce the proceeds
+// received on a short sale rather than increasing the cost.
+func (s *PositionService) equityShortOpen(ctx context.Context, tradeID, chainID string, tx domain.Transaction) error {
+	qty := tx.Quantity.Abs()
+	if qty.IsZero() {
+		return fmt.Errorf("equity short open tx %s has zero quantity", tx.ID)
+	}
+	// AvgCostPerShare = effective short price net of fees (what we actually received per share).
+	avgCost := tx.FillPrice.Sub(tx.Fees.Div(qty))
+
+	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
+	if errors.Is(err, domain.ErrNotFound) {
+		posID, err := uuid.NewV7()
+		if err != nil {
+			return fmt.Errorf("generate position id: %w", err)
+		}
+		return s.positions.CreatePosition(ctx, &domain.Position{
+			ID:                 posID.String(),
+			AccountID:          tx.AccountID,
+			ChainID:            chainID,
+			OriginatingTradeID: tradeID,
+			UnderlyingSymbol:   tx.Instrument.Symbol,
+			NetQuantity:        qty.Neg(),
+			AvgCostPerShare:    avgCost,
+			OpenedAt:           tx.ExecutedAt,
+			UpdatedAt:          tx.ExecutedAt,
+			StrategyType:       domain.StrategyStock,
+		})
+	}
+	if err != nil {
+		return fmt.Errorf("get position: %w", err)
+	}
+
+	if existing.ClosedAt != nil {
+		// Re-opening a short after the previous short was fully covered.
+		existing.NetQuantity = qty.Neg()
+		existing.AvgCostPerShare = avgCost
+		existing.ClosedAt = nil
+		existing.OpenedAt = tx.ExecutedAt
+		existing.UpdatedAt = tx.ExecutedAt
+		return s.positions.UpdatePosition(ctx, existing)
+	}
+
+	// Accumulate into existing short — WAC on absolute quantities, then re-negate.
+	heldAbs := existing.NetQuantity.Abs()
+	newQty := heldAbs.Add(qty)
+	existing.AvgCostPerShare = heldAbs.Mul(existing.AvgCostPerShare).
+		Add(qty.Mul(tx.FillPrice)).
+		Sub(tx.Fees).
+		Div(newQty)
+	existing.NetQuantity = newQty.Neg()
+	existing.UpdatedAt = tx.ExecutedAt
+	return s.positions.UpdatePosition(ctx, existing)
+}
+
+// equityShortCover reduces a short stock position and computes realized P&L.
+//
+//	realized = qty × (avg_short_price − cover_price) − cover_fees
+func (s *PositionService) equityShortCover(ctx context.Context, chainID string, tx domain.Transaction) error {
+	existing, err := s.positions.GetPositionByChainID(ctx, tx.AccountID, chainID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return fmt.Errorf("no short position found for %s", tx.Instrument.Symbol)
+		}
+		return fmt.Errorf("get position: %w", err)
+	}
+
+	qty := tx.Quantity.Abs()
+	if qty.IsZero() {
+		return fmt.Errorf("equity short cover tx %s has zero quantity", tx.ID)
+	}
+	if existing.NetQuantity.GreaterThanOrEqual(decimal.Zero) {
+		return fmt.Errorf("cover short: position for %s is long or flat (%s shares), not short",
+			tx.Instrument.Symbol, existing.NetQuantity)
+	}
+	heldShort := existing.NetQuantity.Abs()
+	if qty.GreaterThan(heldShort) {
+		return fmt.Errorf("cover %s shares of %s but only %s short", qty, tx.Instrument.Symbol, heldShort)
+	}
+
+	realized := qty.Mul(existing.AvgCostPerShare).Sub(qty.Mul(tx.FillPrice)).Sub(tx.Fees)
+	existing.NetQuantity = existing.NetQuantity.Add(qty) // toward zero
 	existing.RealizedPnL = existing.RealizedPnL.Add(realized)
 	existing.UpdatedAt = tx.ExecutedAt
 	if existing.NetQuantity.IsZero() {

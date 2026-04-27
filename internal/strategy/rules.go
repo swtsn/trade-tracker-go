@@ -3,8 +3,9 @@ package strategy
 import (
 	"sort"
 
-	"github.com/shopspring/decimal"
 	"trade-tracker-go/internal/domain"
+
+	"github.com/shopspring/decimal"
 )
 
 // isOption returns true if the leg's asset class is an option.
@@ -138,8 +139,7 @@ func ruleIronButterfly() Rule {
 
 // ruleIronCondor returns a Rule that matches an iron condor: one long and one short put plus
 // one long and one short call, all at the same expiration, where every put strike is strictly
-// below every call strike. The rule accepts credit, debit, and mixed-width variants because
-// partial fills often produce asymmetric leg orderings that are still logically one condor.
+// below every call strike. The rule accepts credit, debit, and mixed-width variants.
 func ruleIronCondor() Rule {
 	return Rule{
 		Name: domain.StrategyIronCondor,

@@ -108,6 +108,8 @@ func TestParser_Equity_BuyToOpen(t *testing.T) {
 }
 
 func TestParser_Future_Sell(t *testing.T) {
+	// subType "Sell" does not contain "to open", so the ActionSell/Closing fallback is used.
+	// This confirms the existing long-close path is unaffected by the subType disambiguation.
 	row := "2025-10-14T07:20:03-0700,Trade,Sell,SELL,/MCLZ5,Future,Sold 1 /MCLZ5 @ 57.92,0.00,1,0.00,-0.75,-0.82,,,,,,,413432751,-1.57,USD\n"
 	txs := parse(t, row)
 	require.Len(t, txs, 1)
@@ -133,6 +135,48 @@ func TestParser_Future_Buy(t *testing.T) {
 	assert.Equal(t, domain.PositionEffectOpening, tx.PositionEffect)
 	assert.Equal(t, "/MCLZ5", tx.Instrument.Symbol)
 	assert.Equal(t, domain.AssetClassFuture, tx.Instrument.AssetClass)
+}
+
+func TestParser_Future_SellToOpen(t *testing.T) {
+	// Short future: subType "Sell to Open" → ActionSTO, Opening.
+	row := "2025-10-14T07:20:03-0700,Trade,Sell to Open,SELL,/MCLZ5,Future,Sold 1 /MCLZ5 @ 57.92,0.00,1,0.00,-0.75,-0.82,,,,,,,413432751,-1.57,USD\n"
+	txs := parse(t, row)
+	require.Len(t, txs, 1)
+	tx := txs[0]
+
+	assert.Equal(t, domain.ActionSTO, tx.Action)
+	assert.Equal(t, domain.PositionEffectOpening, tx.PositionEffect)
+	assert.Equal(t, "/MCLZ5", tx.Instrument.Symbol)
+	assert.Equal(t, domain.AssetClassFuture, tx.Instrument.AssetClass)
+}
+
+func TestParser_Future_BuyToClose(t *testing.T) {
+	// Cover short future: subType "Buy to Close" → ActionBTC, Closing.
+	row := "2025-10-15T09:15:00-0700,Trade,Buy to Close,BUY,/MCLZ5,Future,Bought 1 /MCLZ5 @ 56.50,0.00,1,0.00,-0.75,-0.82,,,,,,,413432752,-1.57,USD\n"
+	txs := parse(t, row)
+	require.Len(t, txs, 1)
+	tx := txs[0]
+
+	assert.Equal(t, domain.ActionBTC, tx.Action)
+	assert.Equal(t, domain.PositionEffectClosing, tx.PositionEffect)
+	assert.Equal(t, "/MCLZ5", tx.Instrument.Symbol)
+	assert.Equal(t, domain.AssetClassFuture, tx.Instrument.AssetClass)
+}
+
+func TestParser_Equity_SellToOpen(t *testing.T) {
+	// Short equity: subType "Sell to Open" with bare SELL action → ActionSTO, Opening.
+	// This is the primary parser path for equity short-sells.
+	row := "2026-04-10T09:30:00-0700,Trade,Sell to Open,SELL,TSLA,Equity,Sold 10 TSLA @ 200.00,-2000.00,10,-200.00,0.00,-0.05,,,,,,,499000001,-2000.05,USD\n"
+	txs := parse(t, row)
+	require.Len(t, txs, 1)
+	tx := txs[0]
+
+	assert.Equal(t, domain.ActionSTO, tx.Action)
+	assert.Equal(t, domain.PositionEffectOpening, tx.PositionEffect)
+	assert.Equal(t, "TSLA", tx.Instrument.Symbol)
+	assert.Equal(t, domain.AssetClassEquity, tx.Instrument.AssetClass)
+	assert.True(t, decimal.NewFromFloat(10).Equal(tx.Quantity))
+	assert.True(t, decimal.NewFromFloat(200).Equal(tx.FillPrice))
 }
 
 func TestParser_MultiLegSameTradeID(t *testing.T) {

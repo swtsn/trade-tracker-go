@@ -120,7 +120,8 @@ func parseRow(
 	}
 	executedAt = executedAt.UTC()
 
-	domainAction, posEffect, err := mapAction(action)
+	subType := strings.TrimSpace(record[colSubType])
+	domainAction, posEffect, err := mapAction(action, subType)
 	if err != nil {
 		return domain.Transaction{}, err
 	}
@@ -188,7 +189,7 @@ func parseRow(
 	}, nil
 }
 
-func mapAction(action string) (domain.Action, domain.PositionEffect, error) {
+func mapAction(action, subType string) (domain.Action, domain.PositionEffect, error) {
 	switch action {
 	case "BUY_TO_OPEN":
 		return domain.ActionBTO, domain.PositionEffectOpening, nil
@@ -199,9 +200,15 @@ func mapAction(action string) (domain.Action, domain.PositionEffect, error) {
 	case "SELL_TO_CLOSE":
 		return domain.ActionSTC, domain.PositionEffectClosing, nil
 	case "BUY":
-		// Futures use bare BUY/SELL instead of the directional TO_OPEN/TO_CLOSE form.
+		// Futures use bare BUY/SELL. subType disambiguates direction when available.
+		if strings.Contains(strings.ToLower(subType), "to close") {
+			return domain.ActionBTC, domain.PositionEffectClosing, nil
+		}
 		return domain.ActionBuy, domain.PositionEffectOpening, nil
 	case "SELL":
+		if strings.Contains(strings.ToLower(subType), "to open") {
+			return domain.ActionSTO, domain.PositionEffectOpening, nil
+		}
 		return domain.ActionSell, domain.PositionEffectClosing, nil
 	default:
 		return "", "", fmt.Errorf("unrecognized action %q", action)
