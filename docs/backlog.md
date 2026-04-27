@@ -12,6 +12,19 @@ Items explicitly deferred from current phases.
 
 ### Business Logic
 
+- **Stock chain lifecycle (close and re-open)** — stock chains are currently never closed. `findOrCreateStockChain` always appends new trades to the single durable chain for a symbol, even after the position has been fully exited. The correct invariant is:
+
+  - A stock chain is **open** while `NetQuantity != 0` (shares or short interest outstanding).
+  - Any new buy or short-sell while the position is open extends the same chain (link appended, existing chain returned).
+  - When `NetQuantity` reaches zero (full sell or full cover), the chain is **closed** (`UpdateChainClosed`) at that trade's `ExecutedAt`.
+  - The next trade for the same symbol after closure creates a **new chain** rather than appending to the closed one.
+
+  Implementation touch-points:
+  1. `equityShortCover` and `equitySell` already stamp `pos.ClosedAt` when `NetQuantity == 0`; they need to also call `chains.UpdateChainClosed` for the position's chain at the same time (or the position service signals the chain service somehow).
+  2. `findOrCreateStockChain` must check whether the existing chain is closed before appending; if closed, fall through to create a new chain.
+  3. The existing `ChainIsOpen` query used by option/futures chains is based on lot balances; stock chains will need a different open-check (net quantity, not lot remaining quantity, since WAC positions don't use the lot table).
+  4. Tests: buy → sell-all → buy again should produce two distinct chains. Buy → partial sell → buy more should remain one chain.
+
 - **Trade purpose / playbook classification** — a user-defined label applied to a position or chain that captures *why* the trade was put on, orthogonal to the auto-detected strategy type. Examples: "income ladder", "long earnings straddle", "LEAPS hedge". Strategy type is derived mechanically from the leg structure; trade purpose is a higher-level intent that only the user knows.
 
   Design notes:
